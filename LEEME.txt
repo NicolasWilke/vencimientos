@@ -1,0 +1,88 @@
+CONTROL DE VENCIMIENTOS — CÓMO PUBLICARLO EN NETLIFY
+=====================================================
+
+Qué hay en este paquete
+-----------------------
+  sitio/                               → la carpeta que se sube a Netlify
+      index.html                       → la página
+      firebase-conexion.js             → conecta la página con Firebase (no hace falta tocarlo)
+      firebase-config.js               → acá pegás los datos de tu proyecto de Firebase
+  firestore.rules                      → reglas de la base de datos para pegar en Firebase
+  respaldo-control-vencimientos.json   → todo lo cargado hasta hoy (NO lo subas a Netlify)
+
+¿Por qué Firebase? En claude.ai la página guarda los datos en una base que solo existe ahí.
+En Netlify necesita una base propia: Firebase (Firestore) guarda el stock y lo comparte entre
+la PC y el iPhone al instante. El plan gratuito alcanza de sobra para una farmacia.
+
+IMPORTANTE: por ahora la página entra directo, SIN usuario ni contraseña. Cualquiera que tenga
+la dirección de Netlify puede ver, cargar y borrar datos. No la compartas fuera de la farmacia y
+descargá un respaldo cada tanto. Al final de este archivo está cómo activar el ingreso con usuario.
+
+
+PASO 1 — Crear el proyecto en Firebase (una sola vez)
+-----------------------------------------------------
+1. Entrá a https://console.firebase.google.com y creá un proyecto (o usá uno que ya tengas).
+   Google Analytics no hace falta.
+
+2. Base de datos:
+   - Menú Compilación → Firestore Database → Crear base de datos.
+   - Ubicación: southamerica-east1 (São Paulo), la más cercana a Argentina.
+   - Modo: producción.
+   - Cuando esté creada, pestaña "Reglas": borrá lo que hay, pegá el contenido del archivo
+     firestore.rules tal como está → Publicar.
+     (No uses el "modo de prueba" que ofrece Firebase: se vence a los 30 días y la página deja de guardar.)
+
+3. Datos de conexión:
+   - Tocá el engranaje ⚙ → Configuración del proyecto → General → "Tus apps" → ícono </> (Web).
+   - Poné un nombre (por ejemplo "vencimientos"), sin Firebase Hosting → Registrar app.
+   - Te muestra un bloque "const firebaseConfig = { apiKey: ..., authDomain: ..., ... }".
+   - Abrí sitio/firebase-config.js con el Bloc de notas y reemplazá cada PEGAR_AQUI por el
+     valor correspondiente (apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId).
+     Guardá el archivo.
+
+
+PASO 2 — Subir a Netlify
+------------------------
+1. Entrá a https://app.netlify.com/drop (con tu cuenta de Netlify).
+2. Arrastrá la carpeta "sitio" completa a la página.
+3. Netlify te da una dirección del tipo https://nombre-al-azar.netlify.app
+   Podés cambiarla en Site configuration → Change site name.
+
+Para actualizar la página más adelante: Deploys → arrastrá de nuevo la carpeta "sitio".
+
+
+PASO 3 — Pasar los datos que ya cargaste
+----------------------------------------
+1. Abrí tu dirección de Netlify.
+2. Abajo del formulario tocá "Restaurar respaldo" y elegí el archivo
+   respaldo-control-vencimientos.json. Se cargan los vencimientos, la lista de 6.639 códigos,
+   los laboratorios y el stock de SIFACO.
+3. Listo. Desde ahora usá solo la versión de Netlify.
+   Si mientras tanto cargás algo más en la versión de claude.ai, pedile a Claude un respaldo nuevo.
+
+
+En el día a día
+---------------
+- iPhone: abrí la dirección en Safari y tocá Compartir → "Agregar a inicio". Queda como una app.
+  Como Netlify usa https, la cámara en vivo funciona directo en Safari (la primera vez pide permiso).
+- Cada tanto tocá "Descargar respaldo" y guardá el archivo: es una copia de todo.
+- Para actualizar el stock de SIFACO: "Cargar listas" y seleccioná todos los archivos juntos.
+
+
+Si algo no anda
+---------------
+- "Falta configurar Firebase": revisá sitio/firebase-config.js (Paso 1, punto 3).
+- "Se perdió la conexión con la base de datos": revisá que la base de datos esté creada y que
+  hayas publicado las reglas de firestore.rules (Paso 1, punto 2).
+
+
+Más adelante: activar usuario y contraseña
+------------------------------------------
+1. Firebase → Authentication → Comenzar → "Correo electrónico/contraseña" → Habilitar.
+   Pestaña "Usuarios" → "Agregar usuario" para cada persona.
+   Recomendado: Configuración → "Acciones del usuario" → destildá "Habilitar la creación (registro)".
+2. En sitio/firebase-config.js cambiá  pedirIngreso = false  por  pedirIngreso = true.
+3. En Firestore → Reglas, usá la segunda parte de firestore.rules (está explicado adentro)
+   con los emails de tus usuarios → Publicar.
+4. Subí de nuevo la carpeta "sitio" a Netlify.
+   Si alguien ingresa y aparece "Se perdió la conexión con la base de datos", su email no está en las reglas.

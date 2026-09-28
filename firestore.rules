@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===== SIN USUARIO NI CONTRASEÑA (así está ahora) =====
+    // Cualquiera que tenga la dirección de la página puede ver, cargar y borrar.
+    // Solo se permiten las tres colecciones que usa la página.
+    match /stock/{id}     { allow read, write: if true; }
+    match /catalogo/{id}  { allow read, write: if true; }
+    match /ajustes/{id}   { allow read, write: if true; }
+
+    // ===== CON USUARIO Y CONTRASEÑA (para más adelante) =====
+    // 1) En firebase-config.js poné: pedirIngreso = true
+    // 2) Borrá las tres líneas de arriba y sacale las // a las de abajo.
+    // 3) Reemplazá los emails por los usuarios creados en Authentication.
+    //
+    // function autorizado() {
+    //   return request.auth != null
+    //     && request.auth.token.email in ["farmacia@ejemplo.com", "empleado@ejemplo.com"];
+    // }
+    // match /stock/{id}     { allow read, write: if autorizado(); }
+    // match /catalogo/{id}  { allow read, write: if autorizado(); }
+    // match /ajustes/{id}   { allow read, write: if autorizado(); }
+  }
+}

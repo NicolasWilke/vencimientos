@@ -1,0 +1,1206 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Control de vencimientos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script>
+/* La página pide la base con claude.use("db"). En esta versión la base es Firebase:
+   la promesa se resuelve recién cuando alguien ingresa con su usuario. */
+window.__dbListo = new Promise(r => { window.__resolverDb = r; });
+window.claude = { use: n => n === "db" ? window.__dbListo : Promise.resolve(null) };
+</script>
+<script type="module" src="firebase-conexion.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#EEF3F5; --surface:#FFFFFF; --ink:#16252E; --muted:#5B6B75; --line:#D5DEE3;
+  --accent:#0B6B72; --accent-ink:#FFFFFF; --accent-soft:#DDEFF0;
+  --ok:#2E7D4F; --ok-soft:#E1F2E8; --yel:#8A6D00; --yel-soft:#FFF4C2; --yel-bar:#E8C200; --ora:#B84F00; --ora-soft:#FFE3CC; --ora-bar:#F07F1A;
+  --bad:#B3261E; --bad-soft:#FBE3E1; --field:#F7FAFB;
+  --font:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1A1F; --surface:#172429; --ink:#E6EEF1; --muted:#9AADB6; --line:#2A3B42;
+    --accent:#4FB7BE; --accent-ink:#06282B; --accent-soft:#1C3A3E;
+    --ok:#6CC592; --ok-soft:#1B3326; --yel:#F2D45C; --yel-soft:#352E10; --yel-bar:#D9B92E; --ora:#FFA25C; --ora-soft:#3D2412; --ora-bar:#E8782A;
+    --bad:#F28B82; --bad-soft:#3D1D1B; --field:#1D2C32;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1A1F; --surface:#172429; --ink:#E6EEF1; --muted:#9AADB6; --line:#2A3B42;
+  --accent:#4FB7BE; --accent-ink:#06282B; --accent-soft:#1C3A3E;
+  --ok:#6CC592; --ok-soft:#1B3326; --yel:#F2D45C; --yel-soft:#352E10; --yel-bar:#D9B92E; --ora:#FFA25C; --ora-soft:#3D2412; --ora-bar:#E8782A;
+  --bad:#F28B82; --bad-soft:#3D1D1B; --field:#1D2C32;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:980px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:4px 0 2px}
+.sub{color:var(--muted);margin:0 0 18px}
+h2{font-size:1.1rem;margin:0 0 14px;font-weight:700}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.stat b{display:block;font-size:1.6rem;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{color:var(--muted);font-size:.88rem}
+.stat.bad b{color:var(--bad)} .stat.ora b{color:var(--ora)} .stat.yel b{color:var(--yel)}
+.stat[aria-pressed="true"]{outline:2px solid var(--accent);outline-offset:-2px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:22px}
+.panel.editing{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.f{display:flex;flex-direction:column;gap:5px;min-width:0}
+.f label{font-size:.85rem;font-weight:600;color:var(--muted)}
+.c6{grid-column:span 6}.c4{grid-column:span 4}.c3{grid-column:span 3}.c2{grid-column:span 2}
+input,select{font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:10px;padding:11px 12px;width:100%;min-height:46px}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.codeRow{display:flex;gap:8px}
+.codeRow input,#vence,#cantidad{font-variant-numeric:tabular-nums;font-size:1.1rem;font-weight:600}
+.codeRow input{letter-spacing:.04em}
+#vence{letter-spacing:.06em}
+.btn{font:inherit;font-weight:700;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 16px;min-height:46px;cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent}
+.btn.small{min-height:38px;padding:6px 12px;font-size:.9rem}
+.btn[hidden]{display:none}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:.88rem;margin:0}
+.hint.known{color:var(--accent);font-weight:700;font-size:.95rem}
+#hint{margin-top:4px}
+.vinfo{font-size:.88rem;font-weight:600;margin:6px 0 0;min-height:1.3em;color:var(--muted)}
+.vinfo.ok{color:var(--ok)} .vinfo.yel{color:var(--yel)} .vinfo.ora{color:var(--ora)} .vinfo.bad{color:var(--bad)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.chips[hidden]{display:none}
+.chips p{width:100%;margin:0;font-size:.85rem;color:var(--muted)}
+.chip{font:inherit;font-size:.9rem;font-weight:600;border:1px solid var(--line);background:var(--field);color:var(--ink);border-radius:999px;padding:6px 12px;cursor:pointer;font-variant-numeric:tabular-nums}
+.chip.bad{border-color:var(--bad);color:var(--bad)} .chip.ora{border-color:var(--ora-bar);color:var(--ora)} .chip.yel{border-color:var(--yel-bar);color:var(--yel)}
+.check{display:flex;gap:8px;align-items:center;font-size:.95rem;margin:4px 0 8px}
+.check input{width:auto;min-height:0}
+.seguir{display:none;margin:0}
+.tactil .seguir{display:flex}
+.catbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.catbar p{margin:0;color:var(--muted);font-size:.92rem}
+.catbar b{color:var(--ink)}
+
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.toolbar input{flex:1 1 220px}
+.toolbar select{flex:0 1 180px}
+.sync{font-size:.88rem;color:var(--muted);margin:0 0 10px;padding-left:16px;position:relative}
+.sync::before{content:"";position:absolute;left:0;top:.45em;width:9px;height:9px;border-radius:50%;background:var(--muted)}
+.sync.on::before{background:var(--ok)} .sync.off::before{background:var(--bad)}
+.listHead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 10px;flex-wrap:wrap}
+.listHead p{margin:0;color:var(--muted);font-size:.9rem}
+
+/* laboratorio → producto → vencimientos */
+.labs{display:flex;flex-direction:column;gap:12px}
+details.lab{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+details.lab>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px 12px;padding:14px 16px;flex-wrap:wrap}
+details.lab>summary::-webkit-details-marker{display:none}
+.chev{width:10px;height:10px;border-right:2.5px solid var(--muted);border-bottom:2.5px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex:none;margin-right:2px}
+details[open]>summary .chev{transform:rotate(45deg)}
+.labName{font-weight:800;font-size:1.12rem;letter-spacing:-.01em}
+.labName.none{color:var(--muted)}
+.labMeta{color:var(--muted);font-size:.9rem}
+.pills{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-size:.8rem;font-weight:700;padding:3px 9px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.ora{background:var(--ora-soft);color:var(--ora)} .pill.yel{background:var(--yel-soft);color:var(--yel)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.pend{background:var(--field);color:var(--muted);border:1px solid var(--line)}
+.pendRow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px}
+.pendRow .name{font-size:1rem;font-weight:600}
+.labNote{margin:0;padding:0 16px 12px;color:var(--muted);font-size:.88rem}
+.prod{border-top:1px solid var(--line);padding:14px 16px}
+.prodHead{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}
+.label{background:#fff;border-radius:8px;padding:5px 7px;display:flex;align-items:center;justify-content:center;min-width:120px}
+.label svg{display:block;max-width:150px;height:auto}
+.name{font-weight:700;font-size:1.05rem;margin:0}
+.meta{color:var(--muted);font-size:.85rem;margin:2px 0 0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.prodAct{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.link{font:inherit;font-size:.88rem;background:none;border:0;color:var(--accent);padding:6px 8px;cursor:pointer;border-radius:8px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.labForm{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.labForm input{flex:1 1 200px;min-height:40px;padding:8px 10px}
+.lots{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lot{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:7px 10px;border-radius:10px;background:var(--field);border-left:4px solid var(--ok)}
+.lot.yel{border-left-color:var(--yel-bar)} .lot.ora{border-left-color:var(--ora-bar)} .lot.bad{border-left-color:var(--bad)} .lot.zero{opacity:.65}
+.lot .badge{margin-right:auto}
+.badge{display:inline-block;font-size:.88rem;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--ok-soft);color:var(--ok);font-variant-numeric:tabular-nums}
+.lot.yel .badge{background:var(--yel-soft);color:var(--yel)}
+.lot.ora .badge{background:var(--ora-soft);color:var(--ora)}
+.lot.bad .badge{background:var(--bad-soft);color:var(--bad)}
+.qty{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.qty button{font:inherit;font-size:1.15rem;font-weight:700;width:38px;height:36px;border:0;background:var(--surface);color:var(--ink);cursor:pointer}
+.qty output{min-width:46px;text-align:center;font-weight:800;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.rowAct{display:flex;gap:2px;align-items:center}
+.rowAct button{font:inherit;font-size:.85rem;background:none;border:0;color:var(--muted);padding:6px 8px;cursor:pointer;border-radius:8px;text-decoration:underline;text-underline-offset:3px}
+.rowAct button.del:hover{color:var(--bad)}
+.rowAct .ask{font-size:.85rem;font-weight:600;color:var(--bad);padding-right:4px}
+.rowAct button.yes{background:var(--bad);color:#fff;text-decoration:none;font-weight:700;padding:6px 10px}
+.empty{text-align:center;padding:36px 16px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:14px}
+
+dialog{border:0;border-radius:16px;padding:16px;background:var(--surface);color:var(--ink);width:min(420px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog.wide{width:min(640px,94vw)}
+.map{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.prev{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:8px 0}
+.prev table{border-collapse:collapse;font-size:.85rem;width:100%}
+.prev td,.prev th{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;object-fit:cover;display:block}
+.viewer{position:relative;margin:4px 0 10px}
+.viewer::after{content:"";position:absolute;left:8%;right:8%;top:32%;bottom:32%;border:3px solid rgba(255,255,255,.9);border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none}
+.viewer[hidden]{display:none}
+#scanDlg .actions{margin-top:10px}
+#scanDlg .btn{flex:1 1 auto}
+.scanBig{display:none}
+.tactil .scanBig{display:flex;width:100%;justify-content:center;margin-bottom:12px;font-size:1.05rem}
+.tactil #scanBtn{display:none}
+.tactil .wrap{display:flex;flex-direction:column}
+.tactil .wrap>h1{order:-3} .tactil .wrap>.sub{order:-2} .tactil #panel{order:-1}
+.tactil .toast{bottom:auto;top:calc(12px + env(safe-area-inset-top,0px));transform:translate(-50%,-20px)}
+.tactil .toast.show{transform:translate(-50%,0)}
+.tactil #saveBtn{flex:1 1 100%;min-height:52px;font-size:1.05rem}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:90vw;z-index:10}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+.login{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:16px}
+.login[hidden]{display:none}
+.loginBox{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px;width:min(400px,100%);display:flex;flex-direction:column;gap:12px}
+.loginBox h1{margin:0}
+.loginBox .btn{width:100%}
+.loginMsg{margin:0;font-size:.9rem;font-weight:600;color:var(--bad);min-height:1.2em}
+.loginMsg.ok{color:var(--ok)}
+.userbar{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:.88rem;color:var(--muted);margin-bottom:4px}
+.userbar[hidden]{display:none}
+.tactil .userbar{order:-4}
+.respaldo{display:flex;gap:8px;flex-wrap:wrap}
+
+@media (max-width:640px){
+  h1{font-size:1.55rem}
+  .c4,.c3,.c2{grid-column:span 6}
+  .grid .half{grid-column:span 3}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stat b{font-size:1.35rem}
+  .map{grid-template-columns:1fr}
+  .prodHead{grid-template-columns:1fr}
+  .prodHead .label{display:none}
+  .prodAct{justify-content:flex-start;margin-left:-8px}
+  .pills{margin-left:0;width:100%}
+}
+@media (prefers-reduced-motion:reduce){.toast,.chev{transition:none}}
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form class="loginBox" id="loginForm" novalidate>
+    <h1>Control de vencimientos</h1>
+    <p class="hint">Ingresá con el usuario de la farmacia.</p>
+    <div class="f"><label for="loginEmail">Email</label><input id="loginEmail" type="email" autocomplete="username" inputmode="email" required></div>
+    <div class="f"><label for="loginPass">Contraseña</label><input id="loginPass" type="password" autocomplete="current-password" required></div>
+    <p class="loginMsg" id="loginMsg" aria-live="polite"></p>
+    <button class="btn primary" type="submit" id="loginBtn">Ingresar</button>
+    <button class="link" type="button" id="loginReset">Olvidé mi contraseña</button>
+  </form>
+</div>
+<div class="wrap">
+  <div class="userbar" id="userbar" hidden><span id="userEmail"></span><button class="link" type="button" id="logout">Salir</button></div>
+  <h1>Control de vencimientos</h1>
+  <p class="sub">Stock por laboratorio, producto y vencimiento</p>
+
+  <div class="stats">
+    <button class="stat bad" data-f="vencidos" aria-pressed="false"><b id="sBad">0</b><span>Vencidos</span></button>
+    <button class="stat ora" data-f="menos30" aria-pressed="false"><b id="sOra">0</b><span>Menos de 30 días</span></button>
+    <button class="stat yel" data-f="tresmeses" aria-pressed="false"><b id="sYel">0</b><span>Vencen en 3 meses</span></button>
+    <button class="stat" data-f="todos" aria-pressed="false"><b id="sUnits">0</b><span>Unidades en total</span></button>
+  </div>
+
+  <section class="panel" id="panel">
+    <h2 id="formTitle">Cargar vencimiento</h2>
+    <button type="button" class="btn primary scanBig" id="scanBig">Escanear código con la cámara</button>
+    <form id="form" autocomplete="off" novalidate>
+      <div class="grid">
+        <div class="f c6">
+          <label for="codigo">Código de barras</label>
+          <div class="codeRow">
+            <input id="codigo" inputmode="numeric" placeholder="Escaneá o escribí el código" required>
+            <button type="button" class="btn" id="scanBtn">Escanear</button>
+          </div>
+          <p class="hint" id="hint">Escaneá, escribí el mes y año de la caja (ej. 0327) y la cantidad. Enter pasa al siguiente campo.</p>
+        </div>
+        <div class="f c3 half">
+          <label for="vence">Vencimiento</label>
+          <input id="vence" inputmode="numeric" placeholder="MM/AA · ej. 0327" autocomplete="off" enterkeyhint="next" required>
+        </div>
+        <div class="f c3 half">
+          <label for="cantidad">Cantidad</label>
+          <input id="cantidad" type="number" inputmode="numeric" min="0" step="1" value="1" enterkeyhint="done" required>
+        </div>
+      </div>
+      <p class="vinfo" id="vinfo" aria-live="polite"></p>
+      <div class="chips" id="chips" hidden></div>
+      <div class="actions">
+        <button class="btn primary" type="submit" id="saveBtn">Guardar</button>
+        <button class="btn ghost" type="button" id="cancelBtn" hidden>Cancelar edición</button>
+        <label class="check seguir"><input type="checkbox" id="seguir" checked> Seguir escaneando al guardar</label>
+      </div>
+    </form>
+    <div class="catbar">
+      <p id="catInfo">Lista de códigos: <b>sin cargar</b></p>
+      <button class="btn" type="button" id="catBtn">Cargar listas (Excel, CSV o SIFACO)</button>
+      <input type="file" id="catFile" accept=".xlsx,.xls,.csv,.txt,.dbf" multiple hidden>
+    </div>
+    <div class="catbar">
+      <p>Respaldo de todos los datos (vencimientos, lista de códigos y laboratorios).</p>
+      <div class="respaldo">
+        <button class="btn" type="button" id="bkDown">Descargar respaldo</button>
+        <button class="btn" type="button" id="bkUp">Restaurar respaldo</button>
+        <input type="file" id="bkFile" accept=".json,application/json" hidden>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="toolbar">
+      <input id="q" type="search" placeholder="Buscar laboratorio, producto o código">
+      <select id="filtro" aria-label="Filtrar">
+        <option value="todos">Todos</option><option value="vencidos">Vencidos</option>
+        <option value="menos30">Menos de 30 días</option><option value="tresmeses">Vencen en 3 meses</option><option value="sinstock">Sin stock</option><option value="pendientes">Sin vencimiento cargado</option>
+      </select>
+      <select id="orden" aria-label="Ordenar">
+        <option value="vence">Vence primero</option><option value="producto">Alfabético</option>
+        <option value="cantidad">Menos unidades</option><option value="reciente">Cargados recién</option>
+      </select>
+    </div>
+    <p class="sync" id="sync">Conectando…</p>
+    <div class="listHead" id="listHead" hidden>
+      <p id="listInfo"></p>
+      <button class="btn small ghost" type="button" id="toggleAll">Abrir todos</button>
+    </div>
+    <div class="labs" id="list"></div>
+  </section>
+</div>
+
+<datalist id="labsList"></datalist>
+
+<dialog id="scanDlg">
+  <h2>Apuntá al código de barras</h2>
+  <div class="viewer" id="viewer"><video id="video" playsinline autoplay muted></video></div>
+  <p class="hint" id="scanMsg">Abriendo la cámara…</p>
+  <div class="actions">
+    <button class="btn" id="fotoBtn" type="button">Sacar foto del código</button>
+    <button class="btn ghost" id="scanClose" type="button">Cerrar</button>
+  </div>
+  <input type="file" id="fotoInput" accept="image/*" capture="environment" hidden>
+</dialog>
+<dialog id="catDlg" class="wide">
+  <h2>Cargar lista de códigos</h2>
+  <p class="hint" id="catFileInfo"></p>
+  <p class="hint">Elegí qué columna tiene cada dato. Laboratorio y stock son opcionales: el laboratorio agrupa el listado y el stock muestra qué falta cargar.</p>
+  <div class="map">
+    <div class="f"><label for="catCol">Código de barras</label><select id="catCol"></select></div>
+    <div class="f"><label for="catNom">Producto</label><select id="catNom"></select></div>
+    <div class="f"><label for="catLab">Laboratorio</label><select id="catLab"></select></div>
+    <div class="f"><label for="catStk">Stock</label><select id="catStk"></select></div>
+  </div>
+  <label class="check"><input type="checkbox" id="catReemplazar"> Borrar la lista anterior y dejar solo esta</label>
+  <div class="prev" id="catPrev"></div>
+  <p class="hint" id="catMsg"></p>
+  <div class="actions">
+    <button class="btn primary" type="button" id="catGo">Cargar</button>
+    <button class="btn ghost" type="button" id="catCancel">Cancelar</button>
+  </div>
+</dialog>
+<dialog id="bkDlg">
+  <h2>Restaurar respaldo</h2>
+  <p class="hint" id="bkInfo"></p>
+  <p class="hint">Se agregan los datos del archivo. Si un vencimiento ya existe, se reemplaza por el del respaldo. No se borra nada.</p>
+  <p class="hint" id="bkMsg"></p>
+  <div class="actions">
+    <button class="btn primary" type="button" id="bkGo">Restaurar</button>
+    <button class="btn ghost" type="button" id="bkCancel">Cancelar</button>
+  </div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const LS = "stock-items-v1", LSC = "stock-catalogo-v1", SIN_LAB = "Sin laboratorio";
+let items = [], editingId = null, db = null, col = null, catCol = null, ajRef = null;
+let catalogo = {}, catLabs = {}, catStock = {}, labsManual = {}, catPartes = 0;
+const pending = new Map();
+const esTactil = matchMedia("(pointer: coarse)").matches || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)
+  || (navigator.platform==="MacIntel" && navigator.maxTouchPoints > 1);
+document.documentElement.classList.toggle("tactil", esTactil);
+
+/* ---------- fechas: los productos traen mes y año; vale hasta el último día del mes ---------- */
+const hoy = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const ultimoDia = (y,m) => new Date(y, m, 0).getDate();
+const pad = n => String(n).padStart(2,"0");
+function aFechaLocal(v){ const [y,m,d] = v.split("-").map(Number); return new Date(y,m-1,d); }
+function dias(v){ if(!v) return null; return Math.round((aFechaLocal(v) - hoy())/86400000); }
+function tresMeses(){ const d = hoy(); d.setMonth(d.getMonth()+3); return d; }
+function estado(v){
+  const n = dias(v); if(n===null) return "ok";
+  if(n<0) return "bad"; if(n<30) return "ora";
+  return aFechaLocal(v) <= tresMeses() ? "yel" : "ok";
+}
+function esFinDeMes(v){ const [y,m,d] = v.split("-").map(Number); return d===ultimoDia(y,m); }
+function fechaCorta(v){ if(!v) return ""; const [y,m,d] = v.split("-"); return esFinDeMes(v) ? `${m}/${y}` : `${d}/${m}/${y}`; }
+function paraCampo(v){ if(!v) return ""; const [y,m,d] = v.split("-"); return esFinDeMes(v) ? `${m}/${y.slice(2)}` : `${d}/${m}/${y}`; }
+/* Acepta: 0327, 3/27, 03/2027, 032027, 150327, 15/03/2027 */
+function leerVence(txt){
+  const t = String(txt||"").trim(); if(!t) return null;
+  let d = null, mo, y;
+  if(/[\/\-.\s]/.test(t)){
+    const p = t.split(/[\/\-.\s]+/).filter(Boolean).map(Number);
+    if(p.length===2) [mo,y] = p; else if(p.length===3) [d,mo,y] = p; else return null;
+  } else {
+    const s = t.replace(/\D/g,"");
+    if(s.length===3){ mo = +s.slice(0,1); y = +s.slice(1); }
+    else if(s.length===4){ mo = +s.slice(0,2); y = +s.slice(2); }
+    else if(s.length===6){
+      if(/^20\d\d$/.test(s.slice(2))){ mo = +s.slice(0,2); y = +s.slice(2); }
+      else { d = +s.slice(0,2); mo = +s.slice(2,4); y = +s.slice(4); }
+    }
+    else if(s.length===8){ d = +s.slice(0,2); mo = +s.slice(2,4); y = +s.slice(4); }
+    else return null;
+  }
+  if(y < 100) y += 2000;
+  if(!(mo>=1 && mo<=12) || !(y>=2000 && y<=2099)) return null;
+  if(d===null) d = ultimoDia(y,mo);
+  if(!(d>=1 && d<=ultimoDia(y,mo))) return null;
+  return `${y}-${pad(mo)}-${pad(d)}`;
+}
+function textoVence(v){
+  const n = dias(v);
+  if(n===null) return "Sin vencimiento";
+  if(n<0) return `Vencido ${fechaCorta(v)} (hace ${-n} día${n===-1?"":"s"})`;
+  if(n===0) return "Vence hoy";
+  return `Vence ${fechaCorta(v)} (en ${n} día${n===1?"":"s"})`;
+}
+function esc(s){ return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("show"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("show"),2600); }
+
+/* ---------- base de datos ---------- */
+function leerLocal(k, def){ try{ return JSON.parse(localStorage.getItem(k)||"null") || def; }catch(e){ return def; } }
+function sinBase(){ const e = new Error("sin base"); e.code = "sin_base"; return e; }
+async function guardarDoc(it){ const { id, ...data } = it; if(!col) throw sinBase(); await col.doc(id).set(data); }
+async function borrarDoc(id){ if(!col) throw sinBase(); await col.doc(id).delete(); }
+function nuevoId(){ return "p" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ---------- nombres y laboratorios ----------
+   Prioridad: el asignado a mano > el de la lista de códigos (SIFACO) > sin laboratorio.
+   No se estima por prefijo del código: en medicamentos varios laboratorios comparten prefijo. */
+const cod0 = c => String(c||"").trim().replace(/^0+/,"");
+let idx = null;
+function reindex(){
+  const nom = {}, lab = {}, stk = {};
+  for(const k in catalogo) nom[cod0(k)] = catalogo[k];
+  for(const k in catLabs) if(catLabs[k]) lab[cod0(k)] = catLabs[k];
+  for(const k in labsManual) if(labsManual[k]) lab[cod0(k)] = labsManual[k];
+  for(const k in catStock) stk[cod0(k)] = { stock: +catStock[k] || 0, codigo: k };
+  idx = { nom, lab, stk };
+}
+function invalidar(){ idx = null; }
+function catNombre(code){ if(!idx) reindex(); return catalogo[code] || idx.nom[cod0(code)] || ""; }
+function labDe(code){
+  if(!idx) reindex();
+  const k = cod0(code);
+  return { lab: idx.lab[k] || "" };
+}
+function nombre(it){ return catNombre(it.codigo) || it.producto || ("Código " + it.codigo); }
+function stockSifaco(code){ if(!idx) reindex(); const s = idx.stk[cod0(code)]; return s ? s.stock : null; }
+function stockTxt(code){ const s = stockSifaco(code); return s===null ? "" : ` · SIFACO: ${s} u.`; }
+function cargadas(code){ const k = cod0(code); return items.filter(x=>cod0(x.codigo)===k).reduce((t,x)=>t+(x.cantidad||0),0); }
+/* Productos con stock en SIFACO que todavía no tienen ningún vencimiento cargado */
+function pendientes(){
+  if(!idx) reindex();
+  const con = new Set(items.filter(x=>(x.cantidad||0)>0).map(x=>cod0(x.codigo)));
+  const out = [];
+  for(const k in idx.stk){ const s = idx.stk[k]; if(s.stock>0 && !con.has(k)) out.push({ codigo:s.codigo, stock:s.stock }); }
+  return out;
+}
+function listaLabs(){ if(!idx) reindex(); return [...new Set(Object.values(idx.lab))].sort((a,b)=>a.localeCompare(b,"es")); }
+function refrescarDatalist(){ $("#labsList").innerHTML = listaLabs().map(l=>`<option value="${esc(l)}">`).join(""); }
+
+/* ---------- formulario de carga ---------- */
+const F = { codigo:$("#codigo"), vence:$("#vence"), cantidad:$("#cantidad") };
+function conocido(code){
+  const n = catNombre(code); if(n) return { producto:n };
+  const it = items.filter(x=>x.codigo===code && x.producto)[0];
+  return it ? { producto: it.producto } : null;
+}
+function lotesDe(code){ return items.filter(x=>cod0(x.codigo)===cod0(code)).sort((a,b)=>(a.vence||"").localeCompare(b.vence||"")); }
+function autocompletar(){
+  const code = F.codigo.value.trim(), h = $("#hint");
+  mostrarChips();
+  if(!code || editingId) return false;
+  const k = conocido(code), L = labDe(code), st = stockSifaco(code), ya = cargadas(code);
+  if(st!==null && st - ya > 0) F.cantidad.value = st - ya;
+  if(k){
+    h.textContent = `${k.producto}${L.lab ? " · " + L.lab : ""}${st!==null ? ` · SIFACO: ${st} u.${ya ? `, ya cargadas ${ya}` : ""}` : ""}`;
+    h.className = "hint known"; return true;
+  }
+  h.textContent = "Este código no está en la lista: se guarda con el número y después le podés asignar laboratorio."; h.className = "hint"; return false;
+}
+function mostrarChips(){
+  const box = $("#chips"), code = F.codigo.value.trim();
+  const ls = code && !editingId ? lotesDe(code) : [];
+  if(!ls.length){ box.hidden = true; box.innerHTML = ""; return; }
+  box.innerHTML = `<p>Ya cargados de este producto. Tocá uno para sumar unidades a ese vencimiento:</p>` +
+    ls.map(l=>`<button type="button" class="chip ${estado(l.vence)==="ok"?"":estado(l.vence)}" data-v="${l.vence}">${fechaCorta(l.vence)} · ${l.cantidad||0} u.</button>`).join("");
+  box.hidden = false;
+}
+$("#chips").addEventListener("click", e=>{
+  const b = e.target.closest(".chip"); if(!b) return;
+  F.vence.value = paraCampo(b.dataset.v); verVence();
+  F.cantidad.focus(); F.cantidad.select();
+});
+function verVence(){
+  const el = $("#vinfo"), t = F.vence.value.trim();
+  if(!t){ el.textContent = ""; el.className = "vinfo"; return null; }
+  const v = leerVence(t);
+  if(!v){ el.textContent = "Escribí mes y año, por ejemplo 0327 para marzo 2027."; el.className = "vinfo"; return null; }
+  const e = estado(v);
+  el.textContent = `${textoVence(v)}${esFinDeMes(v) ? " · vale hasta el " + fechaCortaLarga(v) : ""}`;
+  el.className = "vinfo " + e; return v;
+}
+function fechaCortaLarga(v){ const [y,m,d] = v.split("-"); return `${d}/${m}/${y}`; }
+F.vence.addEventListener("input", verVence);
+
+F.codigo.addEventListener("keydown", e=>{
+  if(e.key==="Enter"){ e.preventDefault(); if(!F.codigo.value.trim()) return; autocompletar(); F.vence.focus(); F.vence.select(); }
+});
+F.codigo.addEventListener("change", autocompletar);
+F.vence.addEventListener("keydown", e=>{
+  if(e.key==="Enter"){ e.preventDefault(); if(verVence()){ F.cantidad.focus(); F.cantidad.select(); } else toast("Revisá el vencimiento: mes y año, ej. 0327"); }
+});
+
+function limpiar(){
+  $("#form").reset(); F.cantidad.value = 1; editingId = null;
+  $("#formTitle").textContent = "Cargar vencimiento"; $("#saveBtn").textContent = "Guardar";
+  $("#cancelBtn").hidden = true; $("#panel").classList.remove("editing");
+  $("#vinfo").textContent = ""; $("#vinfo").className = "vinfo";
+  $("#chips").hidden = true; F.codigo.readOnly = false;
+  $("#hint").className = "hint"; $("#hint").textContent = "Listo para el próximo.";
+}
+$("#cancelBtn").onclick = ()=>{ limpiar(); if(!esTactil) F.codigo.focus(); };
+
+$("#form").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const codigo = F.codigo.value.trim();
+  if(!codigo){ toast("Falta el código de barras"); F.codigo.focus(); return; }
+  const vence = leerVence(F.vence.value);
+  if(!vence){ toast("Falta el vencimiento: mes y año, ej. 0327"); F.vence.focus(); return; }
+  const cantidad = Math.max(0, parseInt(F.cantidad.value,10)||0);
+  const producto = (conocido(codigo)||{}).producto || "";
+  const ahora = Date.now(), eraEdicion = !!editingId;
+  try{
+    if(editingId){
+      const prev = items.find(x=>x.id===editingId)||{};
+      await guardarDoc({ ...prev, codigo, vence, cantidad, producto: producto || prev.producto || "", id:editingId, actualizado:ahora });
+      toast("Cambios guardados");
+    } else {
+      // Mismo producto y mismo mes/año = mismo vencimiento (la caja trae mes y año)
+      const igual = items.find(x=>cod0(x.codigo)===cod0(codigo) && x.vence===vence)
+        || items.find(x=>cod0(x.codigo)===cod0(codigo) && (x.vence||"").slice(0,7)===vence.slice(0,7));
+      if(igual){
+        const total = (igual.cantidad||0) + cantidad;
+        await guardarDoc({ ...igual, cantidad: total, producto: producto || igual.producto || "", actualizado:ahora });
+        toast(`+${cantidad} u. a ${nombre(igual)} (${fechaCorta(igual.vence)}). Total: ${total}`);
+      } else {
+        await guardarDoc({ id:nuevoId(), codigo, vence, cantidad, producto, creado:ahora, actualizado:ahora });
+        toast(`Guardado: ${producto || "código " + codigo}, ${fechaCorta(vence)}, ${cantidad} u.`);
+      }
+    }
+    ultimoGuardado = { code: cod0(codigo), t: Date.now() };
+    limpiar();
+    if(esTactil){ if(!eraEdicion && $("#seguir").checked) abrirScan(); }
+    else F.codigo.focus();
+  }catch(err){
+    toast(err && err.code==="quota_exceeded" ? "Se llenó el espacio: borrá lo que ya no uses"
+      : err && err.code==="sin_base" ? "Sin conexión con la base de datos: no se guardó" : "No se pudo guardar. Probá de nuevo.");
+  }
+});
+
+function editar(id){
+  const it = items.find(x=>x.id===id); if(!it) return;
+  editingId = id;
+  F.codigo.value = it.codigo; F.vence.value = paraCampo(it.vence); F.cantidad.value = it.cantidad ?? 0;
+  verVence(); $("#chips").hidden = true;
+  $("#formTitle").textContent = `Editar: ${nombre(it)}`; $("#saveBtn").textContent = "Guardar cambios";
+  $("#cancelBtn").hidden = false; $("#panel").classList.add("editing");
+  $("#hint").className = "hint"; $("#hint").textContent = "Corregí el vencimiento o la cantidad y guardá.";
+  irAlFormulario(); F.vence.focus();
+}
+function nuevoVencimiento(code){
+  limpiar(); F.codigo.value = code; autocompletar();
+  irAlFormulario(); F.vence.focus();
+}
+function irAlFormulario(){ $("#panel").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" }); }
+
+/* ---------- cantidad con + / - (agrupa toques antes de guardar) ---------- */
+function cambiarCantidad(id, delta){
+  const it = items.find(x=>x.id===id); if(!it) return;
+  const p = pending.get(id) || { qty: it.cantidad||0 };
+  p.qty = Math.max(0, p.qty + delta);
+  const out = document.querySelector(`[data-q="${id}"]`); if(out) out.textContent = p.qty;
+  clearTimeout(p.t);
+  p.t = setTimeout(async ()=>{
+    pending.delete(id);
+    try{ await guardarDoc({ ...it, cantidad:p.qty, actualizado:Date.now() }); }
+    catch(e){ toast("No se pudo actualizar la cantidad"); render(); }
+  }, 700);
+  pending.set(id, p);
+}
+
+/* ---------- listado: laboratorio → producto → vencimientos ---------- */
+let filtro = "todos", porBorrar = null, labEdit = null;
+const abiertos = new Set();
+function coincide(code, nom){
+  const q = $("#q").value.trim().toLowerCase(); if(!q) return true;
+  return [nom, code, labDe(code).lab || SIN_LAB].join(" ").toLowerCase().includes(q);
+}
+function visibles(){
+  const q = $("#q").value.trim().toLowerCase();
+  if(filtro==="pendientes") return [];
+  return items.filter(it=>{
+    const e = estado(it.vence);
+    if(filtro==="vencidos" && e!=="bad") return false;
+    if(filtro==="menos30" && e!=="ora") return false;
+    if(filtro==="tresmeses" && e!=="yel") return false;
+    if(filtro==="sinstock" && (it.cantidad||0)>0) return false;
+    if(!q) return true;
+    return [nombre(it), it.codigo, labDe(it.codigo).lab || SIN_LAB].join(" ").toLowerCase().includes(q);
+  });
+}
+function agrupar(lotes){
+  const labs = new Map();
+  if(filtro==="pendientes"){
+    for(const p of pendientes()){
+      const nom = catNombre(p.codigo) || ("Código " + p.codigo);
+      if(!coincide(p.codigo, nom)) continue;
+      const L = labDe(p.codigo), ln = L.lab || SIN_LAB;
+      let g = labs.get(ln); if(!g){ g = { nombre:ln, sin:!L.lab, prods:new Map(), pend:[] }; labs.set(ln, g); }
+      g.pend.push({ ...p, nombre:nom });
+    }
+    return [...labs.values()].map(g=>({ ...g, prods:[], unidades:0, cuenta:{bad:0,ora:0,yel:0},
+      pend: g.pend.sort((a,b)=>a.nombre.localeCompare(b.nombre,"es")) }))
+      .sort((a,b)=> a.sin!==b.sin ? (a.sin?1:-1) : a.nombre.localeCompare(b.nombre,"es"));
+  }
+  for(const it of lotes){
+    const L = labDe(it.codigo), ln = L.lab || SIN_LAB;
+    let g = labs.get(ln); if(!g){ g = { nombre:ln, sin:!L.lab, prods:new Map(), pend:[] }; labs.set(ln, g); }
+    const pk = cod0(it.codigo);
+    let p = g.prods.get(pk); if(!p){ p = { codigo:it.codigo, nombre:nombre(it), lotes:[] }; g.prods.set(pk, p); }
+    p.lotes.push(it);
+  }
+  const o = $("#orden").value;
+  const clave = x => o==="producto" ? x.nombre.toLowerCase()
+    : o==="cantidad" ? x.unidades
+    : o==="reciente" ? -x.reciente
+    : x.primero;
+  const cmp = (a,b) => { const A = clave(a), B = clave(b); return typeof A==="string" ? A.localeCompare(B,"es") : A-B; };
+  const out = [];
+  for(const g of labs.values()){
+    const prods = [...g.prods.values()].map(p=>{
+      p.lotes.sort((a,b)=>(a.vence||"9999").localeCompare(b.vence||"9999"));
+      p.unidades = p.lotes.reduce((s,l)=>s+(l.cantidad||0),0);
+      p.primero = p.lotes[0].vence ? +aFechaLocal(p.lotes[0].vence) : Infinity;
+      p.reciente = Math.max(...p.lotes.map(l=>l.creado||0));
+      return p;
+    }).sort(cmp);
+    const c = { bad:0, ora:0, yel:0 };
+    for(const p of prods) for(const l of p.lotes){ const e = estado(l.vence); if(e!=="ok") c[e]++; }
+    out.push({ ...g, prods, cuenta:c,
+      unidades: prods.reduce((s,p)=>s+p.unidades,0),
+      primero: Math.min(...prods.map(p=>p.primero)),
+      reciente: Math.max(...prods.map(p=>p.reciente)) });
+  }
+  const pl = {};
+  for(const p of pendientes()){ const ln = labDe(p.codigo).lab || SIN_LAB; pl[ln] = (pl[ln]||0) + 1; }
+  for(const g of out) g.nPend = pl[g.nombre] || 0;
+  out.sort((a,b)=> a.sin!==b.sin ? (a.sin?1:-1) : cmp(a,b));
+  return out;
+}
+function formatoBarras(c){
+  if(/^\d{13}$/.test(c)) return "EAN13"; if(/^\d{8}$/.test(c)) return "EAN8"; if(/^\d{12}$/.test(c)) return "UPC";
+  return "CODE128";
+}
+function dibujarBarras(svg, code){
+  if(!window.JsBarcode) return;
+  const opts = { height:34, width:1.3, margin:0, fontSize:12, font:"Figtree", background:"#ffffff", lineColor:"#111111", textMargin:2 };
+  try{ JsBarcode(svg, code, { ...opts, format:formatoBarras(code) }); }
+  catch(e){ try{ JsBarcode(svg, code, { ...opts, format:"CODE128" }); }catch(e2){} }
+}
+function htmlLote(it){
+  const e = estado(it.vence), q = pending.has(it.id) ? pending.get(it.id).qty : (it.cantidad||0);
+  const acciones = porBorrar===it.id
+    ? `<span class="ask">¿Borrar este vencimiento?</span>
+       <button class="yes" data-act="delyes" data-id="${it.id}">Sí, borrar</button>
+       <button data-act="delno" data-id="${it.id}">No</button>`
+    : `<button data-act="edit" data-id="${it.id}">Editar</button>
+       <button class="del" data-act="del" data-id="${it.id}">Borrar</button>`;
+  return `<li class="lot ${e==="ok"?"":e} ${q===0?"zero":""}">
+    <span class="badge">${textoVence(it.vence)}</span>
+    <div class="qty">
+      <button aria-label="Restar una unidad" data-act="minus" data-id="${it.id}">−</button>
+      <output data-q="${it.id}" aria-label="Unidades">${q}</output>
+      <button aria-label="Sumar una unidad" data-act="plus" data-id="${it.id}">+</button>
+    </div>
+    <div class="rowAct">${acciones}</div>
+  </li>`;
+}
+function htmlProducto(p, sinLab){
+  const k = cod0(p.codigo), editando = labEdit===k;
+  const actual = labDe(p.codigo);
+  return `<div class="prod">
+    <div class="prodHead">
+      <div class="label"><svg data-bc="${esc(p.codigo)}" role="img" aria-label="Código ${esc(p.codigo)}"></svg></div>
+      <div>
+        <p class="name">${esc(p.nombre)}</p>
+        <p class="meta">Código ${esc(p.codigo)} · ${p.unidades} u. cargadas${stockTxt(p.codigo)}</p>
+      </div>
+      <div class="prodAct">
+        <button class="link" data-act="addlot" data-code="${esc(p.codigo)}">+ Vencimiento</button>
+        <button class="link" data-act="lab" data-code="${esc(p.codigo)}">${sinLab ? "Asignar laboratorio" : "Cambiar laboratorio"}</button>
+      </div>
+    </div>
+    ${editando ? `<form class="labForm" data-code="${esc(p.codigo)}">
+      <input name="lab" list="labsList" value="${esc(actual.lab)}" placeholder="Nombre del laboratorio" aria-label="Laboratorio" required>
+      <button class="btn small primary" type="submit">Guardar</button>
+      <button class="btn small ghost" type="button" data-act="labno">Cancelar</button>
+    </form>` : ""}
+    <ul class="lots">${p.lotes.map(htmlLote).join("")}</ul>
+  </div>`;
+}
+function htmlPendiente(p){
+  return `<div class="prod pendRow">
+    <div><p class="name">${esc(p.nombre)}</p><p class="meta">Código ${esc(p.codigo)} · SIFACO: ${p.stock} u.</p></div>
+    <button class="btn small" data-act="addlot" data-code="${esc(p.codigo)}">Cargar vencimiento</button>
+  </div>`;
+}
+function render(){
+  const e = items.map(i=>estado(i.vence));
+  $("#sBad").textContent = e.filter(x=>x==="bad").length;
+  $("#sOra").textContent = e.filter(x=>x==="ora").length;
+  $("#sYel").textContent = e.filter(x=>x==="yel").length;
+  $("#sUnits").textContent = items.reduce((s,i)=>s+(i.cantidad||0),0);
+  document.querySelectorAll(".stat").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.f===filtro && filtro!=="todos")));
+
+  const ul = $("#list"), head = $("#listHead");
+  const labPrev = ul.querySelector(".labForm input"), labTexto = labPrev ? labPrev.value : null, labFoco = labPrev && document.activeElement===labPrev;
+  if(!items.length){
+    head.hidden = true;
+    const n = Object.keys(catalogo).length;
+    ul.innerHTML = `<div class="empty">${n ? `La lista de códigos ya tiene ${n.toLocaleString("es-AR")} productos, así que al escanear se reconocen solos.<br>` : ""}Acá aparece el stock agrupado por laboratorio a medida que cargás vencimientos.</div>`;
+    return;
+  }
+  const grupos = agrupar(visibles());
+  if(!grupos.length){
+    head.hidden = true;
+    ul.innerHTML = `<div class="empty">${filtro==="pendientes" && !$("#q").value.trim()
+      ? (Object.keys(catStock).length ? "No quedan productos con stock sin vencimiento cargado." : "Para ver qué falta cargar, subí las listas de SIFACO con la columna de stock.")
+      : "Nada coincide con la búsqueda o el filtro."}</div>`;
+    return;
+  }
+  const modoPend = filtro==="pendientes";
+  const forzar = !!$("#q").value.trim() || (filtro!=="todos" && !modoPend) || grupos.length===1;
+  const nProd = grupos.reduce((s,g)=>s+(modoPend ? g.pend.length : g.prods.length),0);
+  const totalPend = modoPend ? nProd : pendientes().length;
+  head.hidden = false;
+  $("#listInfo").innerHTML = modoPend
+    ? `${nProd} producto${nProd===1?"":"s"} con stock sin vencimiento cargado, en ${grupos.length} laboratorio${grupos.length===1?"":"s"}`
+    : `${grupos.length} laboratorio${grupos.length===1?"":"s"} · ${nProd} producto${nProd===1?"":"s"}${totalPend ? ` · <button class="link" type="button" data-act="verpend">${totalPend.toLocaleString("es-AR")} sin vencimiento cargado</button>` : ""}`;
+  const todosAbiertos = forzar || grupos.every(g=>abiertos.has(g.nombre));
+  $("#toggleAll").textContent = todosAbiertos ? "Cerrar todos" : "Abrir todos";
+  $("#toggleAll").hidden = forzar && grupos.length===1;
+
+  if(modoPend){
+    ul.innerHTML = grupos.map(g=>{
+      const abierto = forzar || abiertos.has("pend:" + g.nombre);
+      const uds = g.pend.reduce((t,p)=>t+p.stock,0);
+      return `<details class="lab" data-lab="pend:${esc(g.nombre)}" ${abierto?"open":""}>
+        <summary><span class="chev" aria-hidden="true"></span>
+          <span class="labName ${g.sin?"none":""}">${esc(g.nombre)}</span>
+          <span class="labMeta">${g.pend.length} producto${g.pend.length===1?"":"s"} sin vencimiento · ${uds} u. en SIFACO</span>
+        </summary>
+        ${abierto ? g.pend.map(htmlPendiente).join("") : ""}
+      </details>`;
+    }).join("");
+    return;
+  }
+  ul.innerHTML = grupos.map(g=>{
+    const c = g.cuenta, abierto = forzar || abiertos.has(g.nombre) || (labEdit && g.prods.some(p=>cod0(p.codigo)===labEdit));
+    const pills = [
+      c.bad ? `<span class="pill bad">${c.bad} vencido${c.bad===1?"":"s"}</span>` : "",
+      c.ora ? `<span class="pill ora">${c.ora} en menos de 30 días</span>` : "",
+      c.yel ? `<span class="pill yel">${c.yel} en 3 meses</span>` : "",
+      !c.bad && !c.ora && !c.yel ? `<span class="pill ok">Todo en fecha</span>` : "",
+      g.nPend ? `<span class="pill pend">${g.nPend} sin vencimiento</span>` : ""
+    ].join("");
+    return `<details class="lab" data-lab="${esc(g.nombre)}" ${abierto?"open":""}>
+      <summary><span class="chev" aria-hidden="true"></span>
+        <span class="labName ${g.sin?"none":""}">${esc(g.nombre)}</span>
+        <span class="labMeta">${g.prods.length} producto${g.prods.length===1?"":"s"} · ${g.unidades} u.</span>
+        <span class="pills">${pills}</span>
+      </summary>
+      ${g.sin ? `<p class="labNote">Asigná el laboratorio de cada producto, o cargá la lista de SIFACO de ese laboratorio y se ubican solos.</p>` : ""}
+      ${g.prods.map(p=>htmlProducto(p, g.sin)).join("")}
+    </details>`;
+  }).join("");
+  ul.querySelectorAll("details[open] svg[data-bc]").forEach(s=>dibujarBarras(s, s.dataset.bc));
+  const f = ul.querySelector(".labForm input");
+  if(f){
+    if(labTexto!==null){ f.value = labTexto; if(labFoco) f.focus(); }
+    else { f.focus(); f.select(); }
+  }
+}
+$("#list").addEventListener("toggle", e=>{
+  const d = e.target; if(!d.matches || !d.matches("details.lab")) return;
+  const forzar = !!$("#q").value.trim() || (filtro!=="todos" && filtro!=="pendientes");
+  if(forzar) return;
+  if(d.dataset.lab.startsWith("pend:")){
+    if(d.open){ abiertos.add(d.dataset.lab); if(!d.querySelector(".pendRow")) render(); } else abiertos.delete(d.dataset.lab);
+    return;
+  }
+  if(d.open){ abiertos.add(d.dataset.lab); d.querySelectorAll("svg[data-bc]:not([data-done])").forEach(s=>{ dibujarBarras(s, s.dataset.bc); s.dataset.done = 1; }); }
+  else abiertos.delete(d.dataset.lab);
+  const n = document.querySelectorAll("details.lab").length, a = document.querySelectorAll("details.lab[open]").length;
+  $("#toggleAll").textContent = a===n ? "Cerrar todos" : "Abrir todos";
+}, true);
+$("#listHead").addEventListener("click", e=>{
+  const b = e.target.closest('button[data-act="verpend"]'); if(!b) return;
+  filtro = "pendientes"; $("#filtro").value = "pendientes"; render();
+  $("#listHead").scrollIntoView({ block:"start", behavior:"auto" });
+});
+$("#toggleAll").onclick = ()=>{
+  const ds = [...document.querySelectorAll("details.lab")], abrir = ds.some(d=>!d.open);
+  ds.forEach(d=>{ if(abrir) abiertos.add(d.dataset.lab); else abiertos.delete(d.dataset.lab); });
+  if(!abrir && ($("#q").value.trim() || (filtro!=="todos" && filtro!=="pendientes"))){ $("#q").value = ""; filtro = "todos"; $("#filtro").value = "todos"; }
+  render();
+};
+$("#list").addEventListener("click", async e=>{
+  const b = e.target.closest("button[data-act]"); if(!b) return;
+  const id = b.dataset.id, act = b.dataset.act;
+  if(act==="plus") cambiarCantidad(id, 1);
+  else if(act==="minus") cambiarCantidad(id, -1);
+  else if(act==="edit") editar(id);
+  else if(act==="addlot") nuevoVencimiento(b.dataset.code);
+  else if(act==="verpend"){ filtro = "pendientes"; $("#filtro").value = "pendientes"; render(); }
+  else if(act==="lab"){ labEdit = cod0(b.dataset.code); refrescarDatalist(); render(); }
+  else if(act==="labno"){ labEdit = null; render(); }
+  else if(act==="del"){ porBorrar = id; render(); }
+  else if(act==="delno"){ porBorrar = null; render(); }
+  else if(act==="delyes"){
+    const it = items.find(x=>x.id===id); b.disabled = true;
+    try{ await borrarDoc(id); porBorrar = null; toast(`${it ? nombre(it) + " " + fechaCorta(it.vence) : "Vencimiento"} borrado`); if(editingId===id) limpiar(); }
+    catch(err){ porBorrar = null; render(); toast(err && err.code==="sin_base" ? "Sin conexión con la base de datos: no se borró" : "No se pudo borrar. Probá de nuevo."); }
+  }
+});
+$("#list").addEventListener("submit", async e=>{
+  const f = e.target.closest(".labForm"); if(!f) return;
+  e.preventDefault();
+  const code = f.dataset.code, lab = f.lab.value.trim().replace(/\s+/g," ");
+  if(!lab){ f.lab.focus(); return; }
+  // Respeta mayúsculas de un laboratorio que ya existe (Bagó / BAGO / bago → el ya usado)
+  const existente = listaLabs().find(l=>l.toLowerCase()===lab.toLowerCase()) || lab;
+  f.querySelector("button[type=submit]").disabled = true;
+  try{
+    await guardarLab(cod0(code), existente);
+    labEdit = null; abiertos.add(existente);
+    toast(`Laboratorio guardado: ${existente}`);
+  }catch(err){ toast("No se pudo guardar el laboratorio. Probá de nuevo."); render(); }
+});
+async function guardarLab(code, lab){
+  if(!ajRef) throw sinBase();
+  try{ await ajRef.update({ labs:{ [code]: lab } }); }
+  catch(e){
+    if(e && e.code==="invalid_argument") await ajRef.set({ labs:{ ...labsManual, [code]: lab } });
+    else throw e;
+  }
+  labsManual = { ...labsManual, [code]: lab }; invalidar(); render();
+}
+$("#q").addEventListener("input", render);
+$("#orden").addEventListener("change", render);
+$("#filtro").addEventListener("change", e=>{ filtro = e.target.value; render(); });
+document.querySelectorAll(".stat").forEach(b=>b.addEventListener("click", ()=>{
+  filtro = (filtro===b.dataset.f) ? "todos" : b.dataset.f;
+  $("#filtro").value = filtro; render();
+}));
+
+/* ---------- escaneo con cámara (iPhone, Android y PC con cámara) ---------- */
+const ZX_URL = "https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js";
+let stream = null, scanning = false, zxReady = null, zxReader = null, nativo = null;
+const cv = document.createElement("canvas"), cx = cv.getContext("2d", { willReadFrequently:true });
+function cargarZX(){
+  if(window.ZXing) return Promise.resolve();
+  if(!zxReady) zxReady = new Promise((ok, ko)=>{
+    const sc = document.createElement("script"); sc.src = ZX_URL; sc.async = true;
+    sc.onload = ok; sc.onerror = ()=>{ zxReady = null; ko(new Error("zxing")); };
+    document.head.appendChild(sc);
+  });
+  return zxReady;
+}
+function lectorZX(){
+  if(zxReader) return zxReader;
+  const Z = window.ZXing, h = new Map();
+  h.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8, Z.BarcodeFormat.UPC_A,
+    Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF]);
+  h.set(Z.DecodeHintType.TRY_HARDER, true);
+  zxReader = new Z.MultiFormatReader(); zxReader.setHints(h);
+  return zxReader;
+}
+function leerCanvas(){
+  if(!window.ZXing) return null;
+  const Z = window.ZXing;
+  try{
+    const bmp = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv)));
+    return lectorZX().decodeWithState(bmp).getText();
+  }catch(e){ return null; }
+  finally{ try{ zxReader && zxReader.reset(); }catch(e){} }
+}
+function dibujar(src, w, h, maxLado, rotar){
+  const k = Math.min(1, maxLado / Math.max(w, h));
+  const W = Math.round(w*k), H = Math.round(h*k);
+  if(rotar){ cv.width = H; cv.height = W; cx.save(); cx.translate(H, 0); cx.rotate(Math.PI/2); cx.drawImage(src, 0, 0, W, H); cx.restore(); }
+  else { cv.width = W; cv.height = H; cx.drawImage(src, 0, 0, W, H); }
+}
+async function crearNativo(){
+  if(!("BarcodeDetector" in window)) return null;
+  try{
+    const ok = await BarcodeDetector.getSupportedFormats();
+    const f = ["ean_13","ean_8","upc_a","upc_e","code_128","code_39","itf"].filter(x=>ok.includes(x));
+    return f.length ? new BarcodeDetector({ formats:f }) : null;
+  }catch(e){ return null; }
+}
+let ultimoGuardado = { code:"", t:0 };
+function recienGuardado(code){ return cod0(code)===ultimoGuardado.code && Date.now()-ultimoGuardado.t < 2500; }
+function codigoLeido(code){
+  limpiar();
+  F.codigo.value = String(code).trim();
+  cerrarScan();
+  autocompletar();
+  const k = conocido(F.codigo.value);
+  toast(k ? `Leído: ${k.producto}` : "Código leído");
+  F.vence.focus();
+}
+async function abrirScan(){
+  const dlg = $("#scanDlg"), video = $("#video"), msg = $("#scanMsg");
+  $("#viewer").hidden = false; msg.textContent = "Abriendo la cámara…";
+  if(!dlg.open) dlg.showModal();
+  const zx = cargarZX().catch(()=>null);
+  nativo = await crearNativo();
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return sinCamara("La cámara en vivo no está disponible acá. Tocá “Sacar foto del código”.");
+  }
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ audio:false,
+      video:{ facingMode:{ ideal:"environment" }, width:{ ideal:1920 }, height:{ ideal:1080 } } });
+  }catch(e){
+    return sinCamara(e && e.name==="NotAllowedError"
+      ? "No hay permiso para usar la cámara en vivo. Tocá “Sacar foto del código”: se abre la cámara del teléfono y leemos el código de la foto."
+      : "No se pudo abrir la cámara en vivo. Tocá “Sacar foto del código”.");
+  }
+  if(!dlg.open){ cerrarScan(); return; }
+  const track = stream.getVideoTracks()[0];
+  try{ await track.applyConstraints({ advanced:[{ focusMode:"continuous" }] }); }catch(e){}
+  video.srcObject = stream;
+  try{ await video.play(); }catch(e){}
+  if(!nativo){ await zx; if(!window.ZXing) return sinCamara("No se pudo cargar el lector de códigos. Revisá la conexión a internet y probá de nuevo."); }
+  msg.textContent = "Poné el código dentro del recuadro, a unos 15 cm.";
+  scanning = true;
+  const loop = async ()=>{
+    if(!scanning) return;
+    let code = null;
+    if(video.readyState >= 2 && video.videoWidth){
+      if(nativo){ try{ const r = await nativo.detect(video); if(r.length) code = r[0].rawValue; }catch(e){ nativo = null; } }
+      if(!code && window.ZXing){
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const sw = vw*0.84, sh = vh*0.36, k = Math.min(1, 1100/sw);
+        cv.width = Math.round(sw*k); cv.height = Math.round(sh*k);
+        cx.drawImage(video, vw*0.08, vh*0.32, sw, sh, 0, 0, cv.width, cv.height);
+        code = leerCanvas();
+        if(!code){ dibujar(video, vw, vh, 1280, false); code = leerCanvas(); }
+      }
+    }
+    if(code && recienGuardado(code)){ $("#scanMsg").textContent = "Ese ya se guardó. Apuntá al próximo producto."; code = null; }
+    if(code){ scanning = false; return codigoLeido(code); }
+    setTimeout(loop, nativo ? 150 : 90);
+  };
+  loop();
+}
+function sinCamara(texto){
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  $("#viewer").hidden = true; $("#scanMsg").textContent = texto;
+}
+function cerrarScan(){
+  scanning = false;
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+  $("#video").srcObject = null;
+  const d = $("#scanDlg"); if(d.open) d.close();
+}
+$("#scanBtn").onclick = abrirScan;
+$("#scanBig").onclick = abrirScan;
+$("#scanClose").onclick = cerrarScan;
+$("#scanDlg").addEventListener("close", ()=>{ scanning = false; if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; } });
+$("#fotoBtn").onclick = ()=>{ $("#fotoInput").value = ""; $("#fotoInput").click(); };
+$("#fotoInput").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const msg = $("#scanMsg"); msg.textContent = "Leyendo el código de la foto…";
+  try{
+    const code = await leerFoto(f);
+    if(code) return codigoLeido(code);
+    msg.textContent = "No se encontró un código en la foto. Probá de nuevo más cerca, con buena luz y el código derecho.";
+  }catch(err){ msg.textContent = "No se pudo leer la foto. Probá de nuevo."; }
+});
+async function cargarImagen(file){
+  if(window.createImageBitmap){ try{ return await createImageBitmap(file); }catch(e){} }
+  return await new Promise((ok, ko)=>{ const im = new Image(); im.onload = ()=>ok(im); im.onerror = ko; im.src = URL.createObjectURL(file); });
+}
+async function leerFoto(file){
+  const img = await cargarImagen(file);
+  const w = img.width || img.naturalWidth, h = img.height || img.naturalHeight;
+  if(!nativo) nativo = await crearNativo();
+  if(nativo){ try{ const r = await nativo.detect(img); if(r.length) return r[0].rawValue; }catch(e){} }
+  await cargarZX();
+  for(const lado of [1600, 1000, 2400]){
+    for(const rot of [false, true]){
+      dibujar(img, w, h, lado, rot);
+      const c = leerCanvas(); if(c) return c;
+      await new Promise(r=>setTimeout(r, 0));
+    }
+  }
+  return null;
+}
+if(esTactil) cargarZX().catch(()=>{});
+
+/* ---------- listas de códigos: una o varias a la vez (por ejemplo, una por laboratorio exportada de SIFACO) ---------- */
+const PARTE = 1500;
+let catFilas = [], catCab = [], catArchivos = [];
+const norm = t => String(t||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+const aCodigo = v => (typeof v==="number" ? v.toFixed(0) : String(v??"").trim()).replace(/\s+/g,"");
+// SIFACO exporta el laboratorio con acentos rotos (Andr¢maco), cortado a 9 letras (AstraZene) y con descuentos (Bag¢ 25%)
+const ACENTOS = { "¢":"ó", "†":"á", "‚":"é", "¡":"í", "£":"ú", "¤":"ñ", "¥":"Ñ" };
+function limpiarLab(v, archivo){
+  let l = String(v??"").replace(/[¢†‚¡£¤¥]/g, c=>ACENTOS[c])
+    .replace(/\s+\d+\s*%.*$/,"").replace(/\s*\(\d+\)\s*$/,"").replace(/\s+/g," ").trim();
+  if(!l) return "";
+  const base = norm(String(archivo||"").replace(/\.[^.]*$/,"").replace(/\.dbf$/i,"")).replace(/[^a-z0-9 ]/g,"");
+  const nl = norm(l);
+  if(l.length>=8 && base.length>nl.length && base.startsWith(nl)) l += base.slice(nl.length);   // AstraZene + ca
+  return l;
+}
+function catInfo(){
+  const n = Object.keys(catalogo).length, nl = Object.values(catLabs).filter(Boolean).length, ns = Object.keys(catStock).length;
+  $("#catInfo").innerHTML = n ? `Lista de códigos: <b>${n.toLocaleString("es-AR")} productos</b>${nl ? `, ${nl.toLocaleString("es-AR")} con laboratorio` : ""}${ns ? `, ${ns.toLocaleString("es-AR")} con stock de SIFACO` : ""}` : "Lista de códigos: <b>sin cargar</b>";
+}
+$("#catBtn").onclick = ()=>{ if(!window.XLSX){ toast("No se pudo cargar el lector de archivos"); return; } $("#catFile").value=""; $("#catFile").click(); };
+$("#catFile").addEventListener("change", async e=>{
+  const fs = [...e.target.files]; if(!fs.length) return;
+  catFilas = []; catCab = []; catArchivos = [];
+  const salteados = [];
+  for(const f of fs){
+    try{
+      const wb = XLSX.read(await f.arrayBuffer(), { type:"array", codepage:1252 });
+      const filas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:"" })
+        .filter(r=>r.some(c=>String(c).trim()!==""));
+      if(filas.length<2){ salteados.push(f.name); continue; }
+      const cab = filas[0].map(h=>String(h).trim());
+      if(!catCab.length) catCab = cab;
+      // Si los archivos traen las columnas en otro orden, se acomodan por nombre de columna
+      const orden = catCab.map(h=>cab.findIndex(x=>norm(x)===norm(h)));
+      if(orden.some(i=>i<0)){ salteados.push(f.name); continue; }
+      for(const r of filas.slice(1)) catFilas.push({ r: orden.map(i=>r[i]), archivo: f.name });
+      catArchivos.push(f.name);
+    }catch(err){ salteados.push(f.name); }
+  }
+  if(!catFilas.length){ toast("No se pudo leer ningún archivo. Probá guardarlo como Excel (.xlsx) o CSV."); return; }
+  const g = (pistas, no=[]) => { for(const p of pistas){ const i = catCab.findIndex((h,j)=>!no.includes(j) && norm(h).includes(p)); if(i>=0) return i; } return -1; };
+  const opts = (sel, opc) => `<option value="-1">${opc ? "No cargar" : "Elegí una columna"}</option>` + catCab.map((h,i)=>`<option value="${i}" ${i===sel?"selected":""}>${esc(h||"Columna "+(i+1))}</option>`).join("");
+  const ic = g(["barra","ean","codigo","cod"]);
+  const il = g(["labora","fabric","proveedor","marca"], [ic]);
+  const ist = g(["stock","existencia","exist"], [ic, il]);
+  const inm = g(["descrip","producto","nombre","articulo","detalle"], [ic, il, ist]);
+  $("#catCol").innerHTML = opts(ic); $("#catNom").innerHTML = opts(inm); $("#catLab").innerHTML = opts(il, true); $("#catStk").innerHTML = opts(ist, true);
+  $("#catFileInfo").textContent = `${catArchivos.length===1 ? catArchivos[0] : catArchivos.length + " archivos"}: ${catFilas.length.toLocaleString("es-AR")} filas.`
+    + (salteados.length ? ` No se pudieron leer: ${salteados.join(", ")}.` : "");
+  $("#catReemplazar").checked = false; $("#catMsg").textContent = "";
+  catVista(); $("#catDlg").showModal();
+});
+function catLeer(){
+  const c = +$("#catCol").value, n = +$("#catNom").value, l = +$("#catLab").value, st = +$("#catStk").value;
+  if(c<0||n<0) return [];
+  const out = [];
+  for(const { r, archivo } of catFilas){
+    const cod = aCodigo(r[c]), nom = String(r[n]??"").trim();
+    if(!cod || !nom || !/^[0-9A-Za-z-]+$/.test(cod) || /^0+$/.test(cod)) continue;
+    const lab = l>=0 ? limpiarLab(r[l], archivo) : "";
+    const stk = st>=0 ? Math.max(0, Math.round(parseFloat(String(r[st]).replace(",", "."))) || 0) : null;
+    out.push([cod, nom, lab, stk]);
+  }
+  return out;
+}
+function catVista(){
+  const r = catLeer(), go = $("#catGo"), conLab = +$("#catLab").value >= 0, conStk = +$("#catStk").value >= 0;
+  go.disabled = !r.length;
+  go.textContent = r.length ? `Cargar ${r.length.toLocaleString("es-AR")} códigos` : "Cargar";
+  $("#catMsg").textContent = r.length ? "" : "Elegí las columnas de código y producto. Solo se cargan filas con los dos datos.";
+  const labsVistos = conLab ? [...new Set(r.map(x=>x[2]).filter(Boolean))] : [];
+  const muestra = [], vistos = new Set();
+  for(const x of r){ if(muestra.length<6 && (!conLab || !vistos.has(x[2]) || r.length<6)){ muestra.push(x); vistos.add(x[2]); } }
+  $("#catPrev").innerHTML = r.length ? `<table><tr><th>Código</th><th>Producto</th>${conLab?"<th>Laboratorio</th>":""}${conStk?"<th>Stock</th>":""}</tr>${muestra.map(([c,n,l,s])=>`<tr><td>${esc(c)}</td><td>${esc(n)}</td>${conLab?`<td>${esc(l)}</td>`:""}${conStk?`<td>${s}</td>`:""}</tr>`).join("")}</table>`
+    + (labsVistos.length ? `<p class="hint" style="padding:8px">Laboratorios: ${labsVistos.slice(0,20).map(esc).join(", ")}${labsVistos.length>20?"…":""}</p>` : "") : "";
+}
+["#catCol","#catNom","#catLab","#catStk"].forEach(s=>$(s).addEventListener("change", catVista));
+$("#catCancel").onclick = ()=>$("#catDlg").close();
+$("#catGo").onclick = async ()=>{
+  const r = catLeer(); if(!r.length) return;
+  const reemplazar = $("#catReemplazar").checked;
+  const nom = reemplazar ? {} : { ...catalogo }, lab = reemplazar ? {} : { ...catLabs }, stk = reemplazar ? {} : { ...catStock };
+  const vistosStk = new Set();
+  for(const [c,n,l,s] of r){
+    // Si el código ya tenía nombre, se conserva: puede haberse corregido a mano
+    if(!nom[c] || reemplazar) nom[c] = n;
+    if(l) lab[c] = l;
+    if(s!==null){ stk[c] = vistosStk.has(c) ? (stk[c]||0) + s : s; vistosStk.add(c); }
+  }
+  const btn = $("#catGo"); btn.disabled = true;
+  try{
+    await guardarCatalogo(nom, lab, stk);
+    catalogo = nom; catLabs = lab; catStock = stk; invalidar(); catInfo(); render(); $("#catDlg").close();
+    toast(`Lista cargada: ${r.length.toLocaleString("es-AR")} códigos`);
+    autocompletar();
+  }catch(err){
+    $("#catMsg").textContent = err && err.code==="quota_exceeded" ? "La lista es demasiado grande para guardarla. Probá con menos archivos a la vez." : "No se pudo guardar la lista. Probá de nuevo.";
+  }
+  btn.disabled = false;
+};
+async function guardarCatalogo(nom, lab, stk){
+  if(!catCol) throw sinBase();
+  const claves = Object.keys(nom).sort(), partes = Math.max(1, Math.ceil(claves.length/PARTE));
+  for(let i=0;i<partes;i++){
+    $("#catMsg").textContent = `Guardando parte ${i+1} de ${partes}…`;
+    const m = {}, l = {}, s = {};
+    for(const k of claves.slice(i*PARTE,(i+1)*PARTE)){ m[k] = nom[k]; if(lab[k]) l[k] = lab[k]; if(stk[k]!==undefined) s[k] = stk[k]; }
+    await catCol.doc("parte-"+i).set({ codigos:m, labs:l, stock:s });
+  }
+  for(let i=partes;i<catPartes;i++) await catCol.doc("parte-"+i).delete();
+  catPartes = partes;
+}
+
+/* ---------- respaldo ---------- */
+function armarRespaldo(){
+  const bk = { formato:"control-vencimientos", version:1, fecha:new Date().toISOString(), stock:{}, catalogo:{}, ajustes:{} };
+  for(const it of items){ const { id, ...d } = it; bk.stock[id] = d; }
+  const claves = Object.keys(catalogo).sort();
+  for(let i=0; i*PARTE < Math.max(claves.length,1); i++){
+    const m = {}, l = {}, s = {};
+    for(const k of claves.slice(i*PARTE,(i+1)*PARTE)){ m[k] = catalogo[k]; if(catLabs[k]) l[k] = catLabs[k]; if(catStock[k]!==undefined) s[k] = catStock[k]; }
+    bk.catalogo["parte-"+i] = { codigos:m, labs:l, stock:s };
+  }
+  if(Object.keys(labsManual).length) bk.ajustes.labs = { labs: labsManual };
+  return bk;
+}
+$("#bkDown").onclick = ()=>{
+  const d = new Date(), f = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(armarRespaldo())], { type:"application/json" }));
+  const a = document.createElement("a"); a.href = url; a.download = `respaldo-vencimientos-${f}.json`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  toast("Respaldo descargado");
+};
+let bkDatos = null;
+$("#bkUp").onclick = ()=>{ $("#bkFile").value = ""; $("#bkFile").click(); };
+$("#bkFile").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const d = JSON.parse(await f.text());
+    if(d.formato!=="control-vencimientos") throw new Error("formato");
+    bkDatos = d;
+    const nc = Object.values(d.catalogo||{}).reduce((t,p)=>t+Object.keys(p.codigos||{}).length,0);
+    $("#bkInfo").textContent = `${f.name}: ${Object.keys(d.stock||{}).length} vencimientos cargados y ${nc.toLocaleString("es-AR")} productos en la lista de códigos.`;
+    $("#bkMsg").textContent = ""; $("#bkGo").disabled = false; $("#bkDlg").showModal();
+  }catch(err){ toast("Ese archivo no es un respaldo de esta página"); }
+});
+$("#bkCancel").onclick = ()=>$("#bkDlg").close();
+$("#bkGo").onclick = async ()=>{
+  if(!bkDatos || !col) return;
+  const btn = $("#bkGo"), msg = $("#bkMsg"); btn.disabled = true;
+  try{
+    const st = Object.entries(bkDatos.stock||{}), ct = Object.entries(bkDatos.catalogo||{});
+    let n = 0; const total = st.length + ct.length;
+    for(const [id, d] of ct){ await catCol.doc(id).set(d); msg.textContent = `Restaurando ${++n} de ${total}…`; }
+    for(const [id, d] of st){ await col.doc(id).set(d); msg.textContent = `Restaurando ${++n} de ${total}…`; }
+    if(bkDatos.ajustes && bkDatos.ajustes.labs) await ajRef.set({ labs:{ ...labsManual, ...(bkDatos.ajustes.labs.labs||{}) } });
+    $("#bkDlg").close(); toast("Respaldo restaurado");
+  }catch(err){ msg.textContent = "No se pudo terminar de restaurar. Probá de nuevo: lo que ya se cargó no se duplica."; btn.disabled = false; }
+};
+
+/* ---------- arranque ---------- */
+function estadoBase(ok, texto){
+  const el = $("#sync"); el.textContent = texto; el.className = "sync " + (ok ? "on" : "off");
+  $("#saveBtn").disabled = !ok; $("#catBtn").disabled = !ok; $("#bkUp").disabled = !ok; $("#bkDown").disabled = !ok;
+}
+async function migrarLocal(){
+  const viejos = leerLocal(LS, []), cat = leerLocal(LSC, {});
+  if(!viejos.length && !Object.keys(cat).length) return;
+  const b = document.createElement("button"); b.className = "btn"; b.type = "button";
+  b.textContent = `Subir ${viejos.length} productos guardados en este dispositivo`;
+  $("#sync").after(b);
+  b.onclick = async ()=>{
+    b.disabled = true; let n = 0;
+    for(const it of viejos){
+      const igual = items.find(x=>x.codigo===it.codigo && (x.vence||"")===(it.vence||""));
+      try{
+        if(igual) await guardarDoc({ ...igual, cantidad:(igual.cantidad||0)+(it.cantidad||0), actualizado:Date.now() });
+        else await guardarDoc({ ...it, id: it.id || nuevoId() });
+        n++;
+      }catch(e){}
+    }
+    try{ localStorage.removeItem(LS); localStorage.removeItem(LSC); }catch(e){}
+    b.remove(); toast(`Subidos ${n} productos a la base de datos`);
+  };
+}
+render();
+estadoBase(false, "Conectando con la base de datos…");
+(async ()=>{
+  const claude = window.claude;
+  db = (claude && claude.use) ? await claude.use("db") : null;
+  if(!db){ estadoBase(false, "Sin conexión con la base de datos: falta configurar Firebase en firebase-config.js (ver LEEME)."); return; }
+  col = db.collection("stock");
+  catCol = db.collection("catalogo");
+  ajRef = db.doc("ajustes/labs");
+  catCol.onSnapshot(snap=>{
+    const m = {}, l = {}, st = {}; catPartes = 0;
+    snap.docs.forEach(d=>{
+      if(!d.id.startsWith("parte-")) return;
+      catPartes = Math.max(catPartes, +d.id.slice(6)+1);
+      const x = d.data() || {}; Object.assign(m, x.codigos || {}); Object.assign(l, x.labs || {}); Object.assign(st, x.stock || {});
+    });
+    catalogo = m; catLabs = l; catStock = st; invalidar(); catInfo(); render();
+  }, ()=>{ catCol = null; });
+  ajRef.onSnapshot(s=>{ labsManual = (s.exists && (s.data()||{}).labs) || {}; invalidar(); render(); }, ()=>{});
+  let primera = true;
+  col.onSnapshot(snap=>{
+    items = snap.docs.map(d=>({ id:d.id, ...d.data() }));
+    estadoBase(true, "Conectado a la base de datos. Lo que se carga queda guardado y lo ven todos al instante.");
+    render(); if(document.activeElement===F.codigo) mostrarChips();
+    if(primera){ primera = false; migrarLocal(); }
+  }, ()=>{
+    col = null;
+    estadoBase(false, "Se perdió la conexión con la base de datos. Recargá la página para seguir cargando.");
+  });
+})();
+if(!esTactil) F.codigo.focus();
+</script>
+</body>
+</html>
