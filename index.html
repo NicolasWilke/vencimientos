@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0B6B72">
+<meta name="theme-color" content="#1375BB">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Vencimientos">
@@ -27,35 +27,36 @@ window.claude = { use: n => n === "db" ? window.__dbListo : Promise.resolve(null
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
-  --bg:#EEF3F5; --surface:#FFFFFF; --ink:#16252E; --muted:#5B6B75; --line:#D5DEE3;
-  --accent:#0B6B72; --accent-ink:#FFFFFF; --accent-soft:#DDEFF0;
+  --bg:#EEF4F9; --surface:#FFFFFF; --ink:#13283A; --muted:#55687A; --line:#D3DEE8;
+  --accent:#1375BB; --accent-ink:#FFFFFF; --accent-soft:#E1EEF9;
   --ok:#2E7D4F; --ok-soft:#E1F2E8; --yel:#8A6D00; --yel-soft:#FFF4C2; --yel-bar:#E8C200; --ora:#B84F00; --ora-soft:#FFE3CC; --ora-bar:#F07F1A;
-  --bad:#B3261E; --bad-soft:#FBE3E1; --field:#F7FAFB;
-  --font:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --bad:#B3261E; --bad-soft:#FBE3E1; --field:#F6F9FC;
+  --brand2:#B1D039; --font:"Figtree",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#0F1A1F; --surface:#172429; --ink:#E6EEF1; --muted:#9AADB6; --line:#2A3B42;
-    --accent:#4FB7BE; --accent-ink:#06282B; --accent-soft:#1C3A3E;
+    --bg:#0D1822; --surface:#14222F; --ink:#E6EEF5; --muted:#9AADBF; --line:#273A4B;
+    --accent:#5AAEEA; --accent-ink:#06223A; --accent-soft:#17324A;
     --ok:#6CC592; --ok-soft:#1B3326; --yel:#F2D45C; --yel-soft:#352E10; --yel-bar:#D9B92E; --ora:#FFA25C; --ora-soft:#3D2412; --ora-bar:#E8782A;
-    --bad:#F28B82; --bad-soft:#3D1D1B; --field:#1D2C32;
+    --bad:#F28B82; --bad-soft:#3D1D1B; --field:#1B2B3A;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0F1A1F; --surface:#172429; --ink:#E6EEF1; --muted:#9AADB6; --line:#2A3B42;
-  --accent:#4FB7BE; --accent-ink:#06282B; --accent-soft:#1C3A3E;
+  --bg:#0D1822; --surface:#14222F; --ink:#E6EEF5; --muted:#9AADBF; --line:#273A4B;
+  --accent:#5AAEEA; --accent-ink:#06223A; --accent-soft:#17324A;
   --ok:#6CC592; --ok-soft:#1B3326; --yel:#F2D45C; --yel-soft:#352E10; --yel-bar:#D9B92E; --ora:#FFA25C; --ora-soft:#3D2412; --ora-bar:#E8782A;
-  --bad:#F28B82; --bad-soft:#3D1D1B; --field:#1D2C32;
+  --bad:#F28B82; --bad-soft:#3D1D1B; --field:#1B2B3A;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:inherit}
-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body{margin:0;border-top:6px solid var(--brand2);background:var(--bg);color:var(--ink);font-family:var(--font);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
 .wrap{max-width:980px;margin:0 auto;padding:20px 16px 48px}
 h1{font-size:1.9rem;font-weight:800;letter-spacing:-.02em;margin:4px 0 2px}
 .sub{color:var(--muted);margin:0 0 18px}
+.wrap>h1::before{content:"";display:inline-block;width:.55em;height:.55em;border-radius:50%;background:var(--brand2);box-shadow:inset 0 0 0 .13em var(--accent);margin-right:.4em;vertical-align:.05em}
 h2{font-size:1.1rem;margin:0 0 14px;font-weight:700}
 
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
