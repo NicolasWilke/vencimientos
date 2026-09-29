@@ -102,6 +102,17 @@ input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visi
 .catbar{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .catbar p{margin:0;color:var(--muted);font-size:.92rem}
 .catbar b{color:var(--ink)}
+.catbar p{flex:1 1 280px}
+.sfRes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.sfRes div{background:var(--field);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.sfRes b{display:block;font-size:1.4rem;font-weight:800;font-variant-numeric:tabular-nums}
+.sfRes span{font-size:.85rem;color:var(--muted)}
+dialog.wide.sfDlg{width:min(900px,94vw)}
+.sfDet{max-height:40vh;overflow:auto}
+.sfDet:focus-visible{outline:2px solid var(--accent)}
+.sfDet td:nth-child(3){white-space:nowrap;font-variant-numeric:tabular-nums}
+.sfDet td{white-space:normal;vertical-align:top}
+@media (max-width:640px){ .sfRes{grid-template-columns:1fr} }
 
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .toolbar input{flex:1 1 220px}
@@ -264,8 +275,13 @@ dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;obje
       </div>
     </form>
     <div class="catbar">
+      <p id="sfInfo">SIFACO: <b>sin sincronizar</b>. Subí los listados exportados de SIFACO para descontar lo vendido y ver lo que entró.</p>
+      <button class="btn primary" type="button" id="sfBtn">Sincronizar con SIFACO</button>
+      <input type="file" id="sfFile" accept=".xlsx,.xls,.csv,.txt,.dbf" multiple hidden>
+    </div>
+    <div class="catbar">
       <p id="catInfo">Lista de códigos: <b>sin cargar</b></p>
-      <button class="btn" type="button" id="catBtn">Cargar listas (Excel, CSV o SIFACO)</button>
+      <button class="btn" type="button" id="catBtn">Cargar lista de códigos (Excel o CSV)</button>
       <input type="file" id="catFile" accept=".xlsx,.xls,.csv,.txt,.dbf" multiple hidden>
     </div>
     <div class="catbar">
@@ -337,6 +353,17 @@ dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;obje
   <div class="actions">
     <button class="btn primary" type="button" id="bkGo">Restaurar</button>
     <button class="btn ghost" type="button" id="bkCancel">Cancelar</button>
+  </div>
+</dialog>
+<dialog id="sfDlg" class="wide sfDlg">
+  <h2>Sincronizar con SIFACO</h2>
+  <p class="hint" id="sfArchivos"></p>
+  <div class="sfRes" id="sfResumen"></div>
+  <div class="prev sfDet" id="sfDetalle"></div>
+  <p class="hint" id="sfMsg"></p>
+  <div class="actions">
+    <button class="btn primary" type="button" id="sfGo" autofocus>Aplicar</button>
+    <button class="btn ghost" type="button" id="sfCancel">Cancelar</button>
   </div>
 </dialog>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -434,9 +461,10 @@ function cargadas(code){ const k = cod0(code); return items.filter(x=>cod0(x.cod
 /* Productos con stock en SIFACO que todavía no tienen ningún vencimiento cargado */
 function pendientes(){
   if(!idx) reindex();
-  const con = new Set(items.filter(x=>(x.cantidad||0)>0).map(x=>cod0(x.codigo)));
+  const car = {};
+  for(const x of items) if((x.cantidad||0)>0){ const k = cod0(x.codigo); car[k] = (car[k]||0) + x.cantidad; }
   const out = [];
-  for(const k in idx.stk){ const s = idx.stk[k]; if(s.stock>0 && !con.has(k)) out.push({ codigo:s.codigo, stock:s.stock }); }
+  for(const k in idx.stk){ const s = idx.stk[k], c = car[k]||0; if(s.stock > c) out.push({ codigo:s.codigo, stock:s.stock, cargadas:c, faltan:s.stock - c }); }
   return out;
 }
 function listaLabs(){ if(!idx) reindex(); return [...new Set(Object.values(idx.lab))].sort((a,b)=>a.localeCompare(b,"es")); }
@@ -695,7 +723,7 @@ function htmlProducto(p, sinLab){
 }
 function htmlPendiente(p){
   return `<div class="prod pendRow">
-    <div><p class="name">${esc(p.nombre)}</p><p class="meta">Código ${esc(p.codigo)} · SIFACO: ${p.stock} u.</p></div>
+    <div><p class="name">${esc(p.nombre)}</p><p class="meta">Código ${esc(p.codigo)} · SIFACO: ${p.stock} u.${p.cargadas ? ` · con vencimiento: ${p.cargadas} · faltan ${p.faltan}` : ""}</p></div>
     <button class="btn small" data-act="addlot" data-code="${esc(p.codigo)}">Cargar vencimiento</button>
   </div>`;
 }
@@ -738,11 +766,11 @@ function render(){
   if(modoPend){
     ul.innerHTML = grupos.map(g=>{
       const abierto = forzar || abiertos.has("pend:" + g.nombre);
-      const uds = g.pend.reduce((t,p)=>t+p.stock,0);
+      const uds = g.pend.reduce((t,p)=>t+p.faltan,0);
       return `<details class="lab" data-lab="pend:${esc(g.nombre)}" ${abierto?"open":""}>
         <summary><span class="chev" aria-hidden="true"></span>
           <span class="labName ${g.sin?"none":""}">${esc(g.nombre)}</span>
-          <span class="labMeta">${g.pend.length} producto${g.pend.length===1?"":"s"} sin vencimiento · ${uds} u. en SIFACO</span>
+          <span class="labMeta">${g.pend.length} producto${g.pend.length===1?"":"s"} · ${uds} u. sin vencimiento cargado</span>
         </summary>
         ${abierto ? g.pend.map(htmlPendiente).join("") : ""}
       </details>`;
@@ -1095,11 +1123,17 @@ $("#catGo").onclick = async ()=>{
   }
   btn.disabled = false;
 };
-async function guardarCatalogo(nom, lab, stk){
+function claveCat(cod, nom){
+  if(nom[cod]!==undefined) return cod;
+  const k = cod0(cod);
+  for(const x of Object.keys(nom)) if(cod0(x)===k) return x;
+  return cod;
+}
+async function guardarCatalogo(nom, lab, stk, aviso){
   if(!catCol) throw sinBase();
   const claves = Object.keys(nom).sort(), partes = Math.max(1, Math.ceil(claves.length/PARTE));
   for(let i=0;i<partes;i++){
-    $("#catMsg").textContent = `Guardando parte ${i+1} de ${partes}…`;
+    (aviso || $("#catMsg")).textContent = `Guardando lista de códigos, parte ${i+1} de ${partes}…`;
     const m = {}, l = {}, s = {};
     for(const k of claves.slice(i*PARTE,(i+1)*PARTE)){ m[k] = nom[k]; if(lab[k]) l[k] = lab[k]; if(stk[k]!==undefined) s[k] = stk[k]; }
     await catCol.doc("parte-"+i).set({ codigos:m, labs:l, stock:s });
@@ -1155,10 +1189,142 @@ $("#bkGo").onclick = async ()=>{
   }catch(err){ msg.textContent = "No se pudo terminar de restaurar. Probá de nuevo: lo que ya se cargó no se duplica."; btn.disabled = false; }
 };
 
+/* ---------- sincronización con SIFACO ----------
+   SIFACO descuenta cada venta de su stock. Al subir sus listados:
+   - si SIFACO tiene menos unidades que las cargadas con vencimiento, la diferencia se vendió:
+     se descuenta de los vencimientos más próximos (en farmacia sale primero lo que vence antes)
+     y los que quedan en 0 se borran;
+   - si tiene más, entró mercadería: el producto aparece en "Sin vencimiento cargado";
+   - los productos que no están en los archivos subidos no se tocan. */
+let sfDatos = null, sfUltima = null;
+async function leerPlanillas(fs){
+  const out = { cab:[], filas:[], archivos:[], salteados:[] };
+  for(const f of fs){
+    try{
+      const wb = XLSX.read(await f.arrayBuffer(), { type:"array", codepage:1252 });
+      const filas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:"" })
+        .filter(r=>r.some(c=>String(c).trim()!==""));
+      if(filas.length<2){ out.salteados.push(f.name); continue; }
+      const cab = filas[0].map(h=>String(h).trim());
+      if(!out.cab.length) out.cab = cab;
+      const orden = out.cab.map(h=>cab.findIndex(x=>norm(x)===norm(h)));
+      if(orden.some(i=>i<0)){ out.salteados.push(f.name); continue; }
+      for(const r of filas.slice(1)) out.filas.push({ r: orden.map(i=>r[i]), archivo: f.name });
+      out.archivos.push(f.name);
+    }catch(err){ out.salteados.push(f.name); }
+  }
+  return out;
+}
+function planSync(d){
+  const col = (pistas, no=[]) => { for(const p of pistas){ const i = d.cab.findIndex((h,j)=>!no.includes(j) && norm(h).includes(p)); if(i>=0) return i; } return -1; };
+  const ic = col(["barra","ean"]) >= 0 ? col(["barra","ean"]) : col(["codigo","cod"]);
+  const ist = col(["stock","existencia","exist"], [ic]);
+  if(ic<0 || ist<0) return { error: "Los archivos tienen que tener una columna de código de barras (BARRAS) y una de stock (STOCK), como los listados de SIFACO." };
+  const il = col(["labora","fabric","proveedor"], [ic, ist]), inm = col(["descrip","producto","nombre","articulo"], [ic, ist, il]);
+  const nuevo = new Map();
+  for(const { r, archivo } of d.filas){
+    const cod = aCodigo(r[ic]);
+    if(!cod || /^0+$/.test(cod) || !/^[0-9A-Za-z-]+$/.test(cod)) continue;
+    const st = Math.max(0, Math.round(parseFloat(String(r[ist]).replace(",", "."))) || 0), k = cod0(cod);
+    const e = nuevo.get(k);
+    if(e) e.stock += st;
+    else nuevo.set(k, { codigo:cod, nom: inm>=0 ? String(r[inm]??"").trim() : "", lab: il>=0 ? limpiarLab(r[il], archivo) : "", stock:st });
+  }
+  const porProd = new Map();
+  for(const it of items){ if((it.cantidad||0)<=0) continue; const k = cod0(it.codigo); if(!porProd.has(k)) porProd.set(k, []); porProd.get(k).push(it); }
+  const escrituras = [], detalle = []; let vendidas = 0, borrar = 0, ajustar = 0;
+  for(const [k, lotes] of porProd){
+    const n = nuevo.get(k); if(!n) continue;
+    const U = lotes.reduce((t,l)=>t+(l.cantidad||0),0);
+    if(U <= n.stock) continue;
+    let resto = U - n.stock; vendidas += resto;
+    lotes.sort((a,b)=>(a.vence||"").localeCompare(b.vence||""));
+    const afect = [];
+    for(const l of lotes){
+      if(resto<=0) break;
+      const q = l.cantidad||0, baja = Math.min(q, resto), queda = q - baja; resto -= baja;
+      if(queda===0){ escrituras.push({ borrar:true, it:l }); borrar++; }
+      else { escrituras.push({ borrar:false, it:{ ...l, cantidad:queda, actualizado:Date.now() } }); ajustar++; }
+      afect.push(`${fechaCorta(l.vence)}: ${q} → ${queda}${queda===0 ? " (se borra)" : ""}`);
+    }
+    detalle.push({ nombre: nombre(lotes[0]), lab: n.lab || labDe(lotes[0].codigo).lab || SIN_LAB, antes:U, despues:n.stock, afect });
+  }
+  let entraron = 0, udsEntraron = 0;
+  for(const [k, n] of nuevo){
+    const U = (porProd.get(k)||[]).reduce((t,l)=>t+(l.cantidad||0),0);
+    if(n.stock > U){ entraron++; udsEntraron += n.stock - U; }
+  }
+  detalle.sort((a,b)=>a.lab.localeCompare(b.lab,"es") || a.nombre.localeCompare(b.nombre,"es"));
+  const labs = [...new Set([...nuevo.values()].map(n=>n.lab).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  return { nuevo, escrituras, detalle, vendidas, borrar, ajustar, entraron, udsEntraron, labs };
+}
+function mostrarPlan(){
+  const plan = planSync(sfDatos), go = $("#sfGo");
+  if(plan.error){ $("#sfResumen").innerHTML = ""; $("#sfDetalle").innerHTML = ""; $("#sfMsg").textContent = plan.error; go.disabled = true; return; }
+  $("#sfResumen").innerHTML = `
+    <div><b>${plan.vendidas}</b><span>unidades vendidas a descontar</span></div>
+    <div><b>${plan.borrar + plan.ajustar}</b><span>vencimientos a actualizar (${plan.borrar} quedan en 0 y se borran)</span></div>
+    <div><b>${plan.entraron}</b><span>productos con stock sin vencimiento cargado (${plan.udsEntraron} u.)</span></div>`;
+  $("#sfDetalle").innerHTML = plan.detalle.length
+    ? `<table><tr><th>Producto</th><th>Laboratorio</th><th>Cargado → SIFACO</th><th>Se descuenta de</th></tr>${plan.detalle.slice(0,200).map(x=>
+        `<tr><td>${esc(x.nombre)}</td><td>${esc(x.lab)}</td><td>${x.antes} → ${x.despues}</td><td>${x.afect.map(esc).join("<br>")}</td></tr>`).join("")}</table>`
+      + (plan.detalle.length>200 ? `<p class="hint" style="padding:8px">Y ${plan.detalle.length-200} productos más.</p>` : "")
+    : `<p class="hint" style="padding:10px">No hay ventas para descontar: lo cargado coincide con SIFACO o todavía no cargaste vencimientos de estos productos.</p>`;
+  $("#sfMsg").textContent = `Laboratorios en los archivos: ${plan.labs.join(", ") || "sin columna de laboratorio"}. Los productos de otros laboratorios no se tocan.`;
+  go.disabled = false;
+  go.textContent = plan.escrituras.length ? `Aplicar: descontar ${plan.vendidas} u. y actualizar el stock` : "Actualizar el stock de SIFACO";
+}
+$("#sfBtn").onclick = ()=>{ if(!window.XLSX){ toast("No se pudo cargar el lector de archivos"); return; } $("#sfFile").value = ""; $("#sfFile").click(); };
+$("#sfFile").addEventListener("change", async e=>{
+  const fs = [...e.target.files]; if(!fs.length) return;
+  sfDatos = await leerPlanillas(fs);
+  if(!sfDatos.filas.length){ toast("No se pudo leer ningún archivo. Probá exportarlos de nuevo desde SIFACO."); return; }
+  $("#sfArchivos").textContent = `${sfDatos.archivos.length===1 ? sfDatos.archivos[0] : sfDatos.archivos.length + " archivos"} · ${sfDatos.filas.length.toLocaleString("es-AR")} productos.`
+    + (sfDatos.salteados.length ? ` No se pudieron leer: ${sfDatos.salteados.join(", ")}.` : "");
+  mostrarPlan(); $("#sfDlg").showModal();
+});
+$("#sfCancel").onclick = ()=>$("#sfDlg").close();
+$("#sfGo").onclick = async ()=>{
+  if(!sfDatos) return;
+  const plan = planSync(sfDatos);   // se recalcula con lo último guardado
+  if(plan.error) return;
+  const go = $("#sfGo"), msg = $("#sfMsg"); go.disabled = true;
+  try{
+    let n = 0;
+    for(const w of plan.escrituras){
+      if(w.borrar) await borrarDoc(w.it.id); else await guardarDoc(w.it);
+      msg.textContent = `Descontando ventas: ${++n} de ${plan.escrituras.length}…`;
+    }
+    const nom = { ...catalogo }, lab = { ...catLabs }, stk = { ...catStock };
+    for(const x of plan.nuevo.values()){
+      const k = claveCat(x.codigo, nom);
+      if(!nom[k]) nom[k] = x.nom || ("Código " + k);
+      if(x.lab) lab[k] = x.lab;
+      stk[k] = x.stock;
+    }
+    await guardarCatalogo(nom, lab, stk, msg);
+    catalogo = nom; catLabs = lab; catStock = stk; invalidar();
+    const reg = { fecha: Date.now(), archivos: plan.labs.length ? plan.labs : sfDatos.archivos, vendidas: plan.vendidas, lotes: plan.escrituras.length, productos: plan.nuevo.size };
+    try{ await db.doc("ajustes/sifaco").set(reg); }catch(e){}
+    sfUltima = reg; sfInfo(); catInfo(); render(); $("#sfDlg").close();
+    toast(plan.vendidas ? `Sincronizado: se descontaron ${plan.vendidas} u. vendidas` : "Sincronizado con SIFACO");
+  }catch(err){
+    msg.textContent = err && err.code==="sin_base" ? "Sin conexión con la base de datos." : "No se pudo terminar. Probá de nuevo: lo que ya se descontó no se descuenta dos veces.";
+    go.disabled = false;
+  }
+};
+function sfInfo(){
+  const el = $("#sfInfo"); if(!sfUltima){ return; }
+  const d = new Date(sfUltima.fecha), dias = Math.floor((hoy() - new Date(d.getFullYear(), d.getMonth(), d.getDate()))/86400000);
+  const cuando = dias===0 ? "hoy" : dias===1 ? "ayer" : `hace ${dias} días`;
+  el.innerHTML = `SIFACO: última sincronización <b>${cuando}</b> (${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())})`
+    + `${sfUltima.vendidas ? `, se descontaron ${sfUltima.vendidas} unidades` : ""}. Sincronizá cada día o cada semana.`;
+}
+
 /* ---------- arranque ---------- */
 function estadoBase(ok, texto){
   const el = $("#sync"); el.textContent = texto; el.className = "sync " + (ok ? "on" : "off");
-  $("#saveBtn").disabled = !ok; $("#catBtn").disabled = !ok; $("#bkUp").disabled = !ok; $("#bkDown").disabled = !ok;
+  $("#saveBtn").disabled = !ok; $("#catBtn").disabled = !ok; $("#sfBtn").disabled = !ok; $("#bkUp").disabled = !ok; $("#bkDown").disabled = !ok;
 }
 async function migrarLocal(){
   const viejos = leerLocal(LS, []), cat = leerLocal(LSC, {});
@@ -1198,6 +1364,7 @@ estadoBase(false, "Conectando con la base de datos…");
     });
     catalogo = m; catLabs = l; catStock = st; invalidar(); catInfo(); render();
   }, ()=>{ catCol = null; });
+  db.doc("ajustes/sifaco").onSnapshot(s=>{ if(s.exists){ sfUltima = s.data(); sfInfo(); } }, ()=>{});
   ajRef.onSnapshot(s=>{ labsManual = (s.exists && (s.data()||{}).labs) || {}; invalidar(); render(); }, ()=>{});
   let primera = true;
   col.onSnapshot(snap=>{
