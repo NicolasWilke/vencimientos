@@ -248,9 +248,13 @@ dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;obje
 .confirma{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--bad-soft);color:var(--bad);border-radius:10px;padding:8px 10px;font-weight:600;font-size:.9rem;margin-top:8px}
 .btn.peligro{background:var(--bad);border-color:var(--bad);color:#fff}
 #printArea{display:none}
+.mDest{display:none;margin-top:2px}
+.mDest .link{padding:4px 0;font-size:.85rem}
 @media (max-width:640px){
   .destAct{margin-left:0}
-  .devTab th:nth-child(2),.devTab td:nth-child(2){display:none}
+  .devTab th:nth-child(2),.devTab td:nth-child(2),.devTab .cDest{display:none}
+  .devTab .mDest{display:block}
+  .devLabHead label{flex-basis:100%}
 }
 @media print{
   body.imprimiendo{border-top:0;background:#fff;color:#000}
@@ -856,8 +860,10 @@ function htmlConfirma(clave, n){
       <button class="btn small peligro" data-act="devsi" data-k="${esc(clave)}">Sí, marcar como devuelto</button>
       <button class="btn small ghost" data-act="devno">No</button></div>` : "";
 }
+const mqMovil = matchMedia("(max-width:640px)");
+mqMovil.addEventListener && mqMovil.addEventListener("change", ()=>{ if(filtro==="devolver") render(); });
 function renderDevolver(){
-  const ul = $("#list"), head = $("#listHead"), plan = planDevolucion(), fin = finDeMes();
+  const ul = $("#list"), head = $("#listHead"), plan = planDevolucion(), fin = finDeMes(), movil = mqMovil.matches;
   const finTxt = `${pad(fin.getDate())}/${pad(fin.getMonth()+1)}/${fin.getFullYear()}`;
   const total = ORDEN_DEST.reduce((t,d)=>t+(plan[d] ? plan[d].lotes : 0),0);
   head.hidden = !total; $("#toggleAll").hidden = true;
@@ -876,12 +882,13 @@ function renderDevolver(){
           <button class="btn small" data-act="devmark" data-k="${esc(clave)}">Marcar como devuelto</button>
           ${nota ? `<span class="nota">${esc(nota)}</span>` : ""}
         </div>
-        <table class="devTab"><tr><th>Producto</th><th>Código</th><th>Vence</th><th class="num">Cant.</th><th>Destino</th></tr>
+        <table class="devTab"><tr><th>Producto</th><th>Código</th><th>Vence</th><th class="num">Cant.</th><th class="cDest">Destino</th></tr>
         ${lotes.map(l=>{
           const e = estado(l.vence), k = cod0(l.codigo);
-          return `<tr class="${e}"><td>${esc(nombre(l))}</td><td>${esc(l.codigo)}</td><td><span class="badge">${e==="bad" ? "Vencido " : "Vence "}${fechaCorta(l.vence)}</span></td><td class="num">${l.cantidad}</td>
-            <td>${devEdit===k ? `<select data-act="destprod" data-code="${esc(k)}" aria-label="Destino del producto">${opcionesDest(destProds[k]||"", true, destinoDe("", lab===SIN_LAB?"":lab).id)}</select>`
-              : `<button class="link" data-act="devedit" data-code="${esc(k)}">${destProds[k] ? "Cambiado · cambiar" : "Cambiar"}</button>`}</td></tr>`;
+          const destHtml = devEdit===k ? `<select data-act="destprod" data-code="${esc(k)}" aria-label="Destino del producto">${opcionesDest(destProds[k]||"", true, destinoDe("", lab===SIN_LAB?"":lab).id)}</select>`
+            : `<button class="link" data-act="devedit" data-code="${esc(k)}">${destProds[k] ? "Cambiado · cambiar destino" : "Cambiar destino"}</button>`;
+          return `<tr class="${e}"><td>${esc(nombre(l))}${movil ? `<div class="mDest">${destHtml}</div>` : ""}</td><td>${esc(l.codigo)}</td><td><span class="badge">${e==="bad" ? "Vencido " : "Vence "}${fechaCorta(l.vence)}</span></td><td class="num">${l.cantidad}</td>
+            <td class="cDest">${movil ? "" : destHtml}</td></tr>`;
         }).join("")}</table>
         ${htmlConfirma(clave, lotes.length)}
       </div>`;
