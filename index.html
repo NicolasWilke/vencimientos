@@ -218,6 +218,58 @@ dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;obje
   .pills{margin-left:0;width:100%}
 }
 @media (prefers-reduced-motion:reduce){.toast,.chev{transition:none}}
+
+/* devoluciones de vencidos */
+.devIntro{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 16px;margin:0 0 12px;color:var(--muted);font-size:.92rem}
+.devIntro b{color:var(--ink)}
+.dest{background:var(--surface);border:1px solid var(--line);border-top:5px solid var(--accent);border-radius:16px;margin-bottom:16px;overflow:hidden}
+.dest[data-dest="farmanet"]{border-top-color:var(--brand2)}
+.dest[data-dest="drogueria"]{border-top-color:var(--muted)}
+.destHead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:14px 16px 6px}
+.destHead h3{margin:0;font-size:1.2rem;font-weight:800}
+.destHead h3 span{font-weight:500;color:var(--muted);font-size:1rem}
+.destAct{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.pasos{margin:0;padding:6px 16px 12px 34px;color:var(--muted);font-size:.9rem;columns:2 320px;column-gap:28px}
+.pasos li{margin:2px 0;break-inside:avoid}
+.devLab{border-top:1px solid var(--line);padding:12px 16px}
+.devLabHead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:8px}
+.devLabHead b{font-size:1.05rem}
+.devLabHead select{width:auto;min-height:36px;padding:4px 8px;font-size:.88rem}
+.nota{flex-basis:100%;font-size:.88rem;font-weight:600;color:var(--yel)}
+.devTab{width:100%;border-collapse:collapse;font-size:.92rem}
+.devTab th{text-align:left;font-size:.8rem;color:var(--muted);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--line)}
+.devTab td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+.devTab tr:last-child td{border-bottom:0}
+.devTab td.num{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.devTab .badge{font-size:.8rem;padding:2px 8px}
+.devTab tr.bad .badge{background:var(--bad-soft);color:var(--bad)}
+.devTab tr.ora .badge{background:var(--ora-soft);color:var(--ora)}
+.devTab select{width:auto;min-height:32px;padding:2px 6px;font-size:.85rem}
+.confirma{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--bad-soft);color:var(--bad);border-radius:10px;padding:8px 10px;font-weight:600;font-size:.9rem;margin-top:8px}
+.btn.peligro{background:var(--bad);border-color:var(--bad);color:#fff}
+#printArea{display:none}
+.mDest{display:none;margin-top:2px}
+.mDest .link{padding:4px 0;font-size:.85rem}
+@media (max-width:640px){
+  .destAct{margin-left:0}
+  .devTab th:nth-child(2),.devTab td:nth-child(2),.devTab .cDest{display:none}
+  .devTab .mDest{display:block}
+  .devLabHead label{flex-basis:100%}
+}
+@media print{
+  body.imprimiendo{border-top:0;background:#fff;color:#000}
+  body.imprimiendo > *:not(#printArea){display:none !important}
+  body.imprimiendo #printArea{display:block;font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#000}
+  #printArea h1{font-size:15pt;margin:0 0 4px}
+  #printArea h2{font-size:12.5pt;margin:14px 0 6px}
+  #printArea p{margin:2px 0 6px}
+  #printArea table{width:100%;border-collapse:collapse;margin-bottom:6px}
+  #printArea th,#printArea td{border:1px solid #777;padding:4px 6px;text-align:left}
+  #printArea td.num,#printArea th.num{text-align:right}
+  #printArea .pLab{break-inside:avoid}
+  #printArea .pLab.salto{break-after:page}
+  #printArea ul{margin:4px 0 8px 18px;padding:0}
+}
 </style>
 </head>
 <body>
@@ -299,7 +351,7 @@ dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;obje
       <input id="q" type="search" placeholder="Buscar laboratorio, producto o código">
       <select id="filtro" aria-label="Filtrar">
         <option value="todos">Todos</option><option value="vencidos">Vencidos</option>
-        <option value="menos30">Menos de 30 días</option><option value="tresmeses">Vencen en 3 meses</option><option value="sinstock">Sin stock</option><option value="pendientes">Sin vencimiento cargado</option>
+        <option value="menos30">Menos de 30 días</option><option value="tresmeses">Vencen en 3 meses</option><option value="sinstock">Sin stock</option><option value="pendientes">Sin vencimiento cargado</option><option value="devolver">Para devolver</option>
       </select>
       <select id="orden" aria-label="Ordenar">
         <option value="vence">Vence primero</option><option value="producto">Alfabético</option>
@@ -366,6 +418,7 @@ dialog video{width:100%;border-radius:10px;background:#000;aspect-ratio:4/3;obje
     <button class="btn ghost" type="button" id="sfCancel">Cancelar</button>
   </div>
 </dialog>
+<div id="printArea" aria-hidden="true"></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -721,6 +774,185 @@ function htmlProducto(p, sinLab){
     <ul class="lots">${p.lotes.map(htmlLote).join("")}</ul>
   </div>`;
 }
+/* ---------- devoluciones de vencidos (planilla de la cadena) ----------
+   Se devuelve lo vencido y lo que vence en el mes en curso.
+   Depósito Caso: cada laboratorio con su ticket. Farmanet: todo junto. Resto: droguería de cada sucursal. */
+const DESTINOS = {
+  caso: { nombre:"Depósito Caso", quien:"Gabriel López", pasos:[
+    "Baja por vencidos en el sistema: cada laboratorio con su ticket.",
+    "Las cajas van con el rótulo correspondiente.",
+    "Se envía una vez por mes, con la baja correspondiente.",
+    "También va acá lo excluido por las droguerías o para desecho (farmacia, perfumería o accesorios)." ], ticketPorLab:true },
+  farmanet: { nombre:"Farmanet", quien:"Gabriel López", pasos:[
+    "Devolución a Farmanet: se puede dar de baja todo junto.",
+    "Todo junto, tanto en el ticket como en la caja.",
+    "Las cajas van con el rótulo correspondiente.",
+    "Se envía una vez por mes, con la baja correspondiente." ] },
+  drogueria: { nombre:"Droguería", quien:"cada sucursal", pasos:[
+    "Baja en sistema.",
+    "Hacer el remito.",
+    "Hacer SAC si corresponde.",
+    "Se devuelve el mes en curso y los meses vencidos.",
+    "Todo lo que no está centralizado se devuelve por droguería." ] }
+};
+const ORDEN_DEST = ["caso", "farmanet", "drogueria"];
+const REGLAS_DEV = [
+  ...["bago","biosintex","ofar","biotenk","denver farma","denver","ena","fabra","genomma","isa","microsules argentina","microsules",
+      "monserrat y eclair","monserrat","eclair","panalab","pierre fabre","savant","silfab","pharmos","austral","cassara",
+      "garden house","ewe","lepetit","medisol","sanitas"].map(k=>[k,"caso"]),
+  ...["abbott","lia abbott oncology","alcon","bausch","boehringer","casasco","forbenton","gador","galderma","lda","naos",
+      "novartis","richmond","sanofi gem","sanofi pasteur","sanofi","sandoz","takeda","valuge","valuge oxa"].map(k=>[k,"farmanet"]),
+  ["isdin","drogueria"], ["eucerin","drogueria"], ["eximia","drogueria"], ["cepage","drogueria"]
+];
+const NOTAS_DEV = {
+  bago: "Solo Bagó OTC y perfumería va a Depósito Caso. Los medicamentos de receta van por droguería: cambiá el destino de esos productos.",
+  isdin: "Isdin se devuelve por Asopro.",
+  eucerin: "Eucerin se devuelve por Del Sud, con planilla.",
+  eximia: "Se devuelve por la droguería donde se compró.",
+  cepage: "Se devuelve por la droguería donde se compró."
+};
+const normLab = t => norm(t).replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+function reglaDev(lab){
+  const l = normLab(lab); if(!l) return null;
+  let mejor = null;
+  for(const [k, d] of REGLAS_DEV){
+    // igual, con palabras de más ("Bausch Lomb"), o cortado por SIFACO a 9 letras ("Boehringe")
+    const ok = l===k || l.startsWith(k+" ") || k.startsWith(l+" ") || (l.length>=7 && k.startsWith(l));
+    if(ok && (!mejor || k.length > mejor[0].length)) mejor = [k, d];
+  }
+  return mejor;
+}
+let destLabs = {}, destProds = {}, devConfirma = null, devEdit = null;
+function destinoDe(code, lab){
+  const k = cod0(code);
+  if(destProds[k]) return { id: destProds[k], manual:"producto" };
+  if(lab && destLabs[lab]) return { id: destLabs[lab], manual:"laboratorio" };
+  const r = reglaDev(lab);
+  return { id: r ? r[1] : "drogueria", clave: r ? r[0] : null };
+}
+function notaImpresa(lab){ const n = notaDev(lab); return n ? n.split(/(?<=\.) /)[0] : ""; }
+function notaDev(lab){ const r = reglaDev(lab); return r ? (NOTAS_DEV[r[0]] || NOTAS_DEV[r[0].split(" ")[0]] || "") : ""; }
+function finDeMes(){ const d = hoy(); return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+function lotesADevolver(conBusqueda){
+  const fin = finDeMes();
+  return items.filter(it=>(it.cantidad||0)>0 && it.vence && aFechaLocal(it.vence) <= fin && (!conBusqueda || coincide(it.codigo, nombre(it))));
+}
+function planDevolucion(){
+  const out = {};
+  for(const it of lotesADevolver(true)){
+    const lab = labDe(it.codigo).lab || SIN_LAB, d = destinoDe(it.codigo, lab === SIN_LAB ? "" : lab).id;
+    const D = out[d] ||= { labs:new Map(), unidades:0, lotes:0 };
+    if(!D.labs.has(lab)) D.labs.set(lab, []);
+    D.labs.get(lab).push(it); D.unidades += it.cantidad||0; D.lotes++;
+  }
+  for(const d in out){
+    for(const l of out[d].labs.values()) l.sort((a,b)=>nombre(a).localeCompare(nombre(b),"es") || (a.vence||"").localeCompare(b.vence||""));
+    out[d].labs = new Map([...out[d].labs.entries()].sort((a,b)=> (a[0]===SIN_LAB) - (b[0]===SIN_LAB) || a[0].localeCompare(b[0],"es")));
+  }
+  return out;
+}
+function opcionesDest(sel, conAuto, auto){
+  return (conAuto ? `<option value="">Según la planilla (${esc(DESTINOS[auto].nombre)})</option>` : "")
+    + ORDEN_DEST.map(d=>`<option value="${d}" ${sel===d?"selected":""}>${esc(DESTINOS[d].nombre)}</option>`).join("");
+}
+function htmlConfirma(clave, n){
+  return devConfirma===clave ? `<div class="confirma">¿Ya se envió? Se borran ${n} vencimiento${n===1?"":"s"} del stock.
+      <button class="btn small peligro" data-act="devsi" data-k="${esc(clave)}">Sí, marcar como devuelto</button>
+      <button class="btn small ghost" data-act="devno">No</button></div>` : "";
+}
+const mqMovil = matchMedia("(max-width:640px)");
+mqMovil.addEventListener && mqMovil.addEventListener("change", ()=>{ if(filtro==="devolver") render(); });
+function renderDevolver(){
+  const ul = $("#list"), head = $("#listHead"), plan = planDevolucion(), fin = finDeMes(), movil = mqMovil.matches;
+  const finTxt = `${pad(fin.getDate())}/${pad(fin.getMonth()+1)}/${fin.getFullYear()}`;
+  const total = ORDEN_DEST.reduce((t,d)=>t+(plan[d] ? plan[d].lotes : 0),0);
+  head.hidden = !total; $("#toggleAll").hidden = true;
+  $("#listInfo").textContent = total ? `${total} vencimiento${total===1?"":"s"} para devolver` : "";
+  const intro = `<div class="devIntro">Se devuelve <b>lo vencido y lo que vence este mes</b> (hasta el ${finTxt}), separado según a dónde se envía. Lo centralizado (Depósito Caso y Farmanet) se envía una vez por mes.</div>`;
+  if(!total){ ul.innerHTML = intro + `<div class="empty">${$("#q").value.trim() ? "Nada coincide con la búsqueda." : "No hay nada para devolver este mes."}</div>`; return; }
+  ul.innerHTML = intro + ORDEN_DEST.filter(d=>plan[d]).map(d=>{
+    const D = plan[d], info = DESTINOS[d];
+    const labsHtml = [...D.labs.entries()].map(([lab, lotes])=>{
+      const auto = reglaDev(lab === SIN_LAB ? "" : lab), autoId = auto ? auto[1] : "drogueria";
+      const nota = lab === SIN_LAB ? "Sin laboratorio asignado: se devuelve por droguería salvo que le cambies el destino." : notaDev(lab);
+      const uds = lotes.reduce((t,l)=>t+(l.cantidad||0),0), clave = `lab:${d}:${lab}`;
+      return `<div class="devLab">
+        <div class="devLabHead"><b>${esc(lab)}</b><span class="labMeta">${lotes.length} vencimiento${lotes.length===1?"":"s"} · ${uds} u.</span>
+          ${lab !== SIN_LAB ? `<label class="labMeta">Destino: <select data-act="destlab" data-lab="${esc(lab)}" aria-label="Destino de ${esc(lab)}">${opcionesDest(destLabs[lab]||"", true, autoId)}</select></label>` : ""}
+          <button class="btn small" data-act="devmark" data-k="${esc(clave)}">Marcar como devuelto</button>
+          ${nota ? `<span class="nota">${esc(nota)}</span>` : ""}
+        </div>
+        <table class="devTab"><tr><th>Producto</th><th>Código</th><th>Vence</th><th class="num">Cant.</th><th class="cDest">Destino</th></tr>
+        ${lotes.map(l=>{
+          const e = estado(l.vence), k = cod0(l.codigo);
+          const destHtml = devEdit===k ? `<select data-act="destprod" data-code="${esc(k)}" aria-label="Destino del producto">${opcionesDest(destProds[k]||"", true, destinoDe("", lab===SIN_LAB?"":lab).id)}</select>`
+            : `<button class="link" data-act="devedit" data-code="${esc(k)}">${destProds[k] ? "Cambiado · cambiar destino" : "Cambiar destino"}</button>`;
+          return `<tr class="${e}"><td>${esc(nombre(l))}${movil ? `<div class="mDest">${destHtml}</div>` : ""}</td><td>${esc(l.codigo)}</td><td><span class="badge">${e==="bad" ? "Vencido " : "Vence "}${fechaCorta(l.vence)}</span></td><td class="num">${l.cantidad}</td>
+            <td class="cDest">${movil ? "" : destHtml}</td></tr>`;
+        }).join("")}</table>
+        ${htmlConfirma(clave, lotes.length)}
+      </div>`;
+    }).join("");
+    const claveD = `dest:${d}`;
+    return `<section class="dest" data-dest="${d}">
+      <div class="destHead"><h3>${esc(info.nombre)} <span>(${esc(info.quien)})</span></h3>
+        <span class="labMeta">${D.labs.size} laboratorio${D.labs.size===1?"":"s"} · ${D.lotes} vencimiento${D.lotes===1?"":"s"} · ${D.unidades} u.</span>
+        <div class="destAct"><button class="btn small" data-act="devprint" data-dest="${d}">Imprimir lista${info.ticketPorLab ? " (un ticket por laboratorio)" : ""}</button>
+          <button class="btn small" data-act="devmark" data-k="${claveD}">Marcar todo como devuelto</button></div></div>
+      <ul class="pasos">${info.pasos.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+      ${htmlConfirma(claveD, D.lotes).replace('class="confirma"', 'class="confirma" style="margin:0 16px 12px"')}
+      ${labsHtml}
+    </section>`;
+  }).join("");
+}
+function lotesDeClave(clave){
+  const plan = planDevolucion(), [tipo, d, ...resto] = clave.split(":"), lab = resto.join(":");
+  if(!plan[d]) return [];
+  return tipo==="dest" ? [...plan[d].labs.values()].flat() : (plan[d].labs.get(lab) || []);
+}
+async function marcarDevuelto(clave){
+  const lotes = lotesDeClave(clave); let n = 0;
+  try{
+    for(const l of lotes){ await borrarDoc(l.id); n++; }
+    devConfirma = null; toast(`Marcado como devuelto: ${n} vencimiento${n===1?"":"s"} fuera del stock`);
+  }catch(err){ devConfirma = null; toast(err && err.code==="sin_base" ? "Sin conexión con la base de datos" : "No se pudo terminar. Probá de nuevo."); }
+  render();
+}
+async function guardarDestino(tipo, clave, dest){
+  const ref = db.doc("ajustes/destinos");
+  if(tipo==="labs") destLabs = { ...destLabs, [clave]: dest }; else destProds = { ...destProds, [clave]: dest };
+  render();
+  try{ await ref.update({ [tipo]: { [clave]: dest } }); }
+  catch(e){
+    if(e && e.code==="invalid_argument"){ try{ await ref.set({ labs: destLabs, prods: destProds }); return; }catch(e2){} }
+    toast("No se pudo guardar el destino. Probá de nuevo.");
+  }
+}
+function imprimirDevolucion(d){
+  const plan = planDevolucion(), D = plan[d], info = DESTINOS[d]; if(!D) return;
+  const hoyTxt = new Date().toLocaleDateString("es-AR");
+  const cab = (sub)=>`<h1>Devolución por vencidos · ${esc(info.nombre)} (${esc(info.quien)})</h1>
+    <p>Sucursal: ______________________ &nbsp; Fecha: ${hoyTxt}${sub ? ` &nbsp; Laboratorio: <b>${esc(sub)}</b>` : ""}</p>`;
+  const tabla = (lotes, conLab)=>`<table><tr>${conLab?"<th>Laboratorio</th>":""}<th>Código</th><th>Producto</th><th>Vence</th><th class="num">Cant.</th></tr>
+    ${lotes.map(l=>`<tr>${conLab?`<td>${esc(labDe(l.codigo).lab||SIN_LAB)}</td>`:""}<td>${esc(l.codigo)}</td><td>${esc(nombre(l))}</td><td>${fechaCorta(l.vence)}</td><td class="num">${l.cantidad}</td></tr>`).join("")}
+    <tr><td colspan="${conLab?4:3}"><b>Total</b></td><td class="num"><b>${lotes.reduce((t,l)=>t+(l.cantidad||0),0)}</b></td></tr></table>`;
+  let html;
+  if(info.ticketPorLab){
+    const labs = [...D.labs.entries()];
+    html = labs.map(([lab, lotes], i)=>`<div class="pLab ${i<labs.length-1?"salto":""}">${cab(lab)}${notaImpresa(lab)?`<p><b>${esc(notaImpresa(lab))}</b></p>`:""}${tabla(lotes,false)}</div>`).join("");
+  } else if(d==="farmanet"){
+    html = cab("") + `<ul>${info.pasos.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>` + tabla([...D.labs.values()].flat(), true);
+  } else {
+    html = cab("") + `<ul>${info.pasos.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>` + [...D.labs.entries()].map(([lab, lotes])=>`<div class="pLab"><h2>${esc(lab)}</h2>${notaImpresa(lab)?`<p><b>${esc(notaImpresa(lab))}</b></p>`:""}${tabla(lotes,false)}</div>`).join("");
+  }
+  $("#printArea").innerHTML = html;
+  document.body.classList.add("imprimiendo");
+  const fin = ()=>{ document.body.classList.remove("imprimiendo"); window.removeEventListener("afterprint", fin); };
+  window.addEventListener("afterprint", fin);
+  try{ window.print(); }catch(e){ fin(); toast("Este navegador no permite imprimir desde acá."); }
+  setTimeout(()=>{ if(!matchMedia("print").matches) fin(); }, 1500);
+}
+
 function htmlPendiente(p){
   return `<div class="prod pendRow">
     <div><p class="name">${esc(p.nombre)}</p><p class="meta">Código ${esc(p.codigo)} · SIFACO: ${p.stock} u.${p.cargadas ? ` · con vencimiento: ${p.cargadas} · faltan ${p.faltan}` : ""}</p></div>
@@ -734,6 +966,8 @@ function render(){
   $("#sYel").textContent = e.filter(x=>x==="yel").length;
   $("#sUnits").textContent = items.reduce((s,i)=>s+(i.cantidad||0),0);
   document.querySelectorAll(".stat").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.f===filtro && filtro!=="todos")));
+  if(filtro==="devolver"){ renderDevolver(); return; }
+  $("#toggleAll").hidden = false;
 
   const ul = $("#list"), head = $("#listHead");
   const labPrev = ul.querySelector(".labForm input"), labTexto = labPrev ? labPrev.value : null, labFoco = labPrev && document.activeElement===labPrev;
@@ -758,7 +992,7 @@ function render(){
   head.hidden = false;
   $("#listInfo").innerHTML = modoPend
     ? `${nProd} producto${nProd===1?"":"s"} con stock sin vencimiento cargado, en ${grupos.length} laboratorio${grupos.length===1?"":"s"}`
-    : `${grupos.length} laboratorio${grupos.length===1?"":"s"} · ${nProd} producto${nProd===1?"":"s"}${totalPend ? ` · <button class="link" type="button" data-act="verpend">${totalPend.toLocaleString("es-AR")} sin vencimiento cargado</button>` : ""}`;
+    : `${grupos.length} laboratorio${grupos.length===1?"":"s"} · ${nProd} producto${nProd===1?"":"s"}${totalPend ? ` · <button class="link" type="button" data-act="verpend">${totalPend.toLocaleString("es-AR")} sin vencimiento cargado</button>` : ""}${(()=>{ const n = lotesADevolver(false).length; return n ? ` · <button class="link" type="button" data-act="verdev">${n} para devolver</button>` : ""; })()}`;
   const todosAbiertos = forzar || grupos.every(g=>abiertos.has(g.nombre));
   $("#toggleAll").textContent = todosAbiertos ? "Cerrar todos" : "Abrir todos";
   $("#toggleAll").hidden = forzar && grupos.length===1;
@@ -817,8 +1051,8 @@ $("#list").addEventListener("toggle", e=>{
   $("#toggleAll").textContent = a===n ? "Cerrar todos" : "Abrir todos";
 }, true);
 $("#listHead").addEventListener("click", e=>{
-  const b = e.target.closest('button[data-act="verpend"]'); if(!b) return;
-  filtro = "pendientes"; $("#filtro").value = "pendientes"; render();
+  const b = e.target.closest('button[data-act="verpend"],button[data-act="verdev"]'); if(!b) return;
+  filtro = b.dataset.act==="verdev" ? "devolver" : "pendientes"; $("#filtro").value = filtro; render();
   $("#listHead").scrollIntoView({ block:"start", behavior:"auto" });
 });
 $("#toggleAll").onclick = ()=>{
@@ -835,6 +1069,11 @@ $("#list").addEventListener("click", async e=>{
   else if(act==="edit") editar(id);
   else if(act==="addlot") nuevoVencimiento(b.dataset.code);
   else if(act==="verpend"){ filtro = "pendientes"; $("#filtro").value = "pendientes"; render(); }
+  else if(act==="devmark"){ devConfirma = b.dataset.k; render(); }
+  else if(act==="devno"){ devConfirma = null; render(); }
+  else if(act==="devsi"){ b.disabled = true; await marcarDevuelto(b.dataset.k); }
+  else if(act==="devedit"){ devEdit = b.dataset.code; render(); const s = document.querySelector(`select[data-act="destprod"]`); if(s) s.focus(); }
+  else if(act==="devprint") imprimirDevolucion(b.dataset.dest);
   else if(act==="lab"){ labEdit = cod0(b.dataset.code); refrescarDatalist(); render(); }
   else if(act==="labno"){ labEdit = null; render(); }
   else if(act==="del"){ porBorrar = id; render(); }
@@ -844,6 +1083,11 @@ $("#list").addEventListener("click", async e=>{
     try{ await borrarDoc(id); porBorrar = null; toast(`${it ? nombre(it) + " " + fechaCorta(it.vence) : "Vencimiento"} borrado`); if(editingId===id) limpiar(); }
     catch(err){ porBorrar = null; render(); toast(err && err.code==="sin_base" ? "Sin conexión con la base de datos: no se borró" : "No se pudo borrar. Probá de nuevo."); }
   }
+});
+$("#list").addEventListener("change", e=>{
+  const s = e.target.closest("select[data-act]"); if(!s) return;
+  if(s.dataset.act==="destlab") guardarDestino("labs", s.dataset.lab, s.value);
+  else if(s.dataset.act==="destprod"){ devEdit = null; guardarDestino("prods", s.dataset.code, s.value); }
 });
 $("#list").addEventListener("submit", async e=>{
   const f = e.target.closest(".labForm"); if(!f) return;
@@ -1364,6 +1608,7 @@ estadoBase(false, "Conectando con la base de datos…");
     });
     catalogo = m; catLabs = l; catStock = st; invalidar(); catInfo(); render();
   }, ()=>{ catCol = null; });
+  db.doc("ajustes/destinos").onSnapshot(s=>{ const x = (s.exists && s.data()) || {}; destLabs = x.labs || {}; destProds = x.prods || {}; if(filtro==="devolver") render(); }, ()=>{});
   db.doc("ajustes/sifaco").onSnapshot(s=>{ if(s.exists){ sfUltima = s.data(); sfInfo(); } }, ()=>{});
   ajRef.onSnapshot(s=>{ labsManual = (s.exists && (s.data()||{}).labs) || {}; invalidar(); render(); }, ()=>{});
   let primera = true;
